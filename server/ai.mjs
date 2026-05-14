@@ -59,15 +59,33 @@ function getVertexClient() {
 }
 
 function parseJsonContent(content) {
+  const raw = String(content || '').trim()
   try {
-    return JSON.parse(content)
+    return JSON.parse(raw)
   } catch {
-    const match = content.match(/\{[\s\S]*\}/)
-    if (match) {
-      try { return JSON.parse(match[0]) } catch {}
+    const unfenced = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim()
+    try {
+      return JSON.parse(unfenced)
+    } catch {}
+
+    const start = unfenced.indexOf('{')
+    const end = unfenced.lastIndexOf('}')
+    if (start !== -1 && end > start) {
+      const candidate = unfenced.slice(start, end + 1)
+      try { return JSON.parse(candidate) } catch {}
     }
-    return null
+
+    const arrayStart = unfenced.indexOf('[')
+    const arrayEnd = unfenced.lastIndexOf(']')
+    if (arrayStart !== -1 && arrayEnd > arrayStart) {
+      const candidate = unfenced.slice(arrayStart, arrayEnd + 1)
+      try { return JSON.parse(candidate) } catch {}
+    }
   }
+  return null
 }
 
 function jsonInstruction(json) {
@@ -89,6 +107,10 @@ async function callVertexAgent({ system, user, json = false, temperature = 0.3, 
   })
 
   const content = response.text || ''
+  if (json) {
+    const preview = content.replace(/\s+/g, ' ').slice(0, 500)
+    console.log(`[ai:vertex] raw_json_preview model=${GEMINI_MODEL} chars=${content.length} preview="${preview}"`)
+  }
   return json ? parseJsonContent(content) : content
 }
 

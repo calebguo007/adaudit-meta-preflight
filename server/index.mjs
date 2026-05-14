@@ -86,7 +86,12 @@ async function handleApi(req, res) {
 
     sseHeaders(res)
     res.write(': connected\n\n')
-    sseSend(res, 'start', { brief, agents: AUDITORS.map((a) => ({ id: a.id, name: a.name })) })
+    sseSend(res, 'start', {
+      brief,
+      endpoint_role: 'legacy_preflight_demo',
+      provider: aiInfo(),
+      agents: AUDITORS.map((a) => ({ id: a.id, name: a.name })),
+    })
     const keepAlive = setInterval(() => {
       res.write(`: keepalive ${Date.now()}\n\n`)
     }, 10000)
@@ -115,7 +120,12 @@ async function handleApi(req, res) {
     const valid = reports.filter(Boolean)
     try {
       const decision = await runCoordinator(brief, valid)
-      sseSend(res, 'coordinator_done', { decision, reports: valid })
+      sseSend(res, 'coordinator_done', {
+        endpoint_role: 'legacy_preflight_demo',
+        provider: aiInfo(),
+        decision,
+        reports: valid,
+      })
       console.log(`[api:${requestId}] POST /api/preflight/stream complete reports=${valid.length} decision=${decision?.decision}`)
     } catch (err) {
       sseSend(res, 'coordinator_error', { error: err.message })
@@ -184,7 +194,12 @@ async function handleApi(req, res) {
       const reports = await runAuditors(brief)
       const decision = await runCoordinator(brief, reports)
       console.log(`[api:${requestId}] POST /api/preflight/run 200 reports=${reports.length} decision=${decision?.decision}`)
-      return json(res, 200, { decision, reports })
+      return json(res, 200, {
+        endpoint_role: 'legacy_preflight_demo',
+        provider: aiInfo(),
+        decision,
+        reports,
+      })
     } catch (err) {
       console.error(`[api:${requestId}] POST /api/preflight/run 500 error=${err?.message || err}`)
       return json(res, 500, { error: err.message })

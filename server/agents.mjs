@@ -6,7 +6,7 @@
 //
 // All agents return JSON in a consistent shape so the UI can render uniformly.
 
-import { callAgent, streamAgent } from './ai.mjs'
+import { aiInfo, callAgent, streamAgent } from './ai.mjs'
 import { collectEvidence } from './evidence.mjs'
 
 // ----- shared output schema (for the prompts) -----
@@ -341,7 +341,12 @@ export async function runMediaBuyingWorkspace(intake) {
   const evidenceBundle = await collectEvidence({ ...normalized, demo_mode: intake?.demo_mode })
   console.log(`[workspace:${requestId}] evidence mode=${evidenceBundle?.mode || 'unknown'} artifacts=${evidenceBundle?.artifacts?.length || 0}`)
   if (intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true') {
-    const workspace = fallbackWorkspace(normalized, evidenceBundle)
+    const workspace = fallbackWorkspace(normalized, evidenceBundle, {
+      requestId,
+      startedAt,
+      source: 'fixture',
+      mode,
+    })
     console.log(`[workspace:${requestId}] fixture complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
     return workspace
   }
@@ -354,12 +359,23 @@ export async function runMediaBuyingWorkspace(intake) {
       json: true,
       maxTokens: 2200,
     })
-    const workspace = completeWorkspace(normalized, result, evidenceBundle)
+    const workspace = completeWorkspace(normalized, result, evidenceBundle, {
+      requestId,
+      startedAt,
+      source: 'vertex-ai',
+      mode,
+    })
     console.log(`[workspace:${requestId}] ai_call success decision=${workspace.final_decision?.status} checks=${workspace.causal_checks?.filter((check) => check.passed).length || 0}/${workspace.causal_checks?.length || 0} duration_ms=${Date.now() - startedAt}`)
     return workspace
   } catch (err) {
     console.error(`[workspace:${requestId}] ai_call failed fallback=true error=${err?.message || err}`)
-    const workspace = fallbackWorkspace(normalized, evidenceBundle)
+    const workspace = fallbackWorkspace(normalized, evidenceBundle, {
+      requestId,
+      startedAt,
+      source: 'fallback-after-ai-error',
+      mode,
+      fallbackReason: err?.message || String(err),
+    })
     console.log(`[workspace:${requestId}] fallback complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
     return workspace
   }
@@ -451,7 +467,7 @@ function normalizeIntake(intake = {}) {
   }
 }
 
-function fallbackWorkspace(intake, evidenceBundle) {
+function fallbackWorkspace(intake, evidenceBundle, meta = {}) {
   const budget = intake.budget_usd || 500
   const isSmallBudget = budget < 1000
   const objective = intake.pixel_status === 'verified' && budget >= 1500 ? 'CONVERSIONS' : 'LEADS'
@@ -800,6 +816,7 @@ function fallbackWorkspace(intake, evidenceBundle) {
     hasRiskyClaim,
     originalClaim: 'Land a job in 7 days',
     repairedClaim: 'Find hidden resume issues before applying',
+    ...meta,
   })
 }
 
@@ -873,6 +890,25 @@ function completeWorkspace(intake, rawWorkspace, evidenceBundle, overrides = {})
     objectiveRecommendation,
     hasRiskyClaim,
   })
+  const provider = aiInfo()
+  const passCount = workspace.causal_checks.filter((check) => check.passed).length
+  workspace.provenance = {
+    request_id: overrides.requestId || 'unknown',
+    mode: overrides.mode || 'live',
+    source: overrides.source || (provider.provider === 'vertex-ai' ? 'vertex-ai' : provider.provider),
+    fallback: Boolean(overrides.fallbackReason),
+    fallback_reason: overrides.fallbackReason || null,
+    ai: provider,
+    evidence_mode: workspace.evidence_artifacts?.mode || evidenceBundle?.mode || 'unknown',
+    causal_checks: {
+      passed: passCount,
+      total: workspace.causal_checks.length,
+    },
+    latency_ms: overrides.startedAt ? Date.now() - overrides.startedAt : null,
+    paused_only: true,
+    active_execution_supported: false,
+  }
+  console.log(`[workspace:${workspace.provenance.request_id}] provenance source=${workspace.provenance.source} fallback=${workspace.provenance.fallback} checks=${passCount}/${workspace.causal_checks.length} latency_ms=${workspace.provenance.latency_ms}`)
 
   return workspace
 }
