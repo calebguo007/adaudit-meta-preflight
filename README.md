@@ -2,7 +2,7 @@
 
 > **AdAudit is a guarded AI media buyer. It simulates the media buy, compares campaign options, recommends the cheapest viable Meta test, and prepares only paused execution.**
 
-Most AI ad tools stop at creative generation or rush toward launch. AdAudit works like a small media buying team: it collects product and budget context, researches evidence, simulates campaign structures, compares risk and signal quality, chooses the best plan, audits the recommendation, and outputs a Meta-compatible `PAUSED` campaign spec for human approval.
+Most AI ad tools stop at creative generation or rush toward launch. AdAudit works like a small media buying team: it collects product and budget context, builds a deterministic media plan, asks Gemini for a live strategy overlay, compares risk and signal quality, checks causal guardrails in code, and outputs a Meta-compatible `PAUSED` campaign spec for human approval.
 
 Built for **AI Agent Olympics Milan 2026**.
 
@@ -24,9 +24,12 @@ AdAudit turns that judgment into a working web app.
    User enters product, landing page notes, platform, budget, objective, KPI priority, audience, available assets, competitors, constraints, and pixel status.
 
 2. **Research Evidence**  
-   The system extracts useful evidence from landing page notes, competitor names, asset descriptions, and Gemini-style multimodal analysis when configured.
+   The system extracts useful evidence from landing page notes, competitor names, asset descriptions, and Gemini-style multimodal analysis when configured. The verified public demo uses stable fixture evidence while Gemini performs live strategy reasoning over that evidence.
 
-3. **Media Simulation**  
+3. **Live Gemini Strategy Overlay**  
+   Gemini on Vertex AI adds a short strategy note covering evidence, creative direction, risk, and the paused-launch decision. The backend wraps this note into the product workspace instead of trusting Gemini to produce the full execution object.
+
+4. **Media Simulation**  
    The workspace compares three options:
 
    - cheapest validation test,
@@ -35,10 +38,10 @@ AdAudit turns that judgment into a working web app.
 
    Each option includes objective, budget, campaign structure, expected signal, KPI ranges, and why it should or should not be chosen.
 
-4. **Recommendation**  
+5. **Recommendation**  
    AdAudit selects the best plan and explains why the alternatives lose.
 
-5. **Guardrail Review**  
+6. **Guardrail Review**  
    Five specialist auditors review the recommendation:
 
    - `TrackingAuditor`
@@ -47,7 +50,7 @@ AdAudit turns that judgment into a working web app.
    - `PolicyAuditor`
    - `CreativeLandingAuditor`
 
-6. **Paused Execution Spec**  
+7. **Paused Execution Spec**  
    The executor creates Meta-compatible IDs only for `PAUSED` objects. There is no `ACTIVE` creation path in the demo.
 
 ## Demo Moment
@@ -67,7 +70,8 @@ The Node server serves the React app and the agent API:
 - `POST /api/brief/parse`
 - `POST /api/plan/generate`
 - `POST /api/workspace/analyze`
-- `POST /api/preflight/run`
+- `POST /api/preflight/run` legacy preflight visualization
+- `POST /api/preflight/stream` legacy preflight visualization
 - `POST /api/campaign/fix`
 - `POST /api/campaign/execute`
 
@@ -86,6 +90,15 @@ curl -X POST http://localhost:8080/api/workspace/analyze \
 ```
 
 For reliable video recording, the same route supports `demo_mode: true`, which uses the built-in media-buying playbook instantly while preserving the same response schema.
+
+Verified production route:
+
+- Public demo URL: [http://95.179.162.188:8080](http://95.179.162.188:8080)
+- Main path: `POST /api/workspace/analyze`
+- AI mode: Google Vertex AI / Gemini 2.5 Flash through Application Default Credentials
+- Stable architecture: deterministic guarded workspace + live Gemini plain-text strategy overlay + programmatic causal checks
+
+The older `/api/preflight/*` endpoints are retained as legacy auditor visualizations. They are not the canonical submission path.
 
 ## Local Development
 
@@ -113,11 +126,12 @@ AI_MODEL=...
 META_EXECUTOR_MODE=mock
 ADAUDIT_FAST_WORKSPACE=false
 
-# Optional: Gemini through Vertex AI + Application Default Credentials.
-GOOGLE_GENAI_USE_VERTEXAI=false
+# Gemini through Vertex AI + Application Default Credentials.
+GOOGLE_GENAI_USE_VERTEXAI=true
 GOOGLE_CLOUD_PROJECT=project-258a4684-a97c-421d-bac
 GOOGLE_CLOUD_LOCATION=global
 GEMINI_MODEL=gemini-2.5-flash
+ADAUDIT_DISABLE_LIVE_EVIDENCE=true
 ```
 
 The AI client supports two provider modes:
@@ -125,7 +139,7 @@ The AI client supports two provider modes:
 - OpenAI-compatible chat completions for DeepSeek gateway, OpenRouter, Vultr Serverless Inference, or OpenAI.
 - Gemini on Vertex AI through Application Default Credentials, matching the Google Cloud hackathon flow where API keys are disallowed.
 
-For the verified Google Cloud path, see [GOOGLE_VERTEX_SETUP.md](GOOGLE_VERTEX_SETUP.md). It includes a `npm run smoke:vertex` test that calls Gemini through Vertex AI/ADC.
+For the verified Google Cloud path, see [GOOGLE_VERTEX_SETUP.md](GOOGLE_VERTEX_SETUP.md). The deployed Vultr instance uses ADC, not a Gemini API key.
 
 ## Vultr Deployment
 
@@ -139,6 +153,13 @@ PORT=8080 npm start
 
 For the Vultr Award, deploy the Node backend and React build on a Vultr VM. See [VULTR_DEPLOYMENT.md](VULTR_DEPLOYMENT.md).
 
+Verified deployment:
+
+- Vultr VM: Ubuntu 24.04, Frankfurt, shared CPU 1 GB
+- Process manager: PM2 app `adaudit`
+- Public URL: [http://95.179.162.188:8080](http://95.179.162.188:8080)
+- Health: [http://95.179.162.188:8080/api/health](http://95.179.162.188:8080/api/health)
+
 ## Competition Fit
 
 Primary target: **Vultr Award**
@@ -147,8 +168,8 @@ Strong category fit:
 
 - **Enterprise Utility**: media buying is a measurable business workflow.
 - **Agentic Workflows**: intake, evidence, simulation, recommendation, audit, execution spec.
-- **Collaborative Systems**: separate planner, evidence, auditor, coordinator, and executor roles.
-- **Multimodal Intelligence / Gemini**: competitor ad and landing page analysis can feed the evidence board.
+- **Collaborative Systems**: separate evidence, media-planning, economics, readiness, coordinator, and executor roles are shown in the workspace timeline.
+- **Multimodal Intelligence / Gemini**: Gemini adds live evidence/creative/risk reasoning through the strategy overlay; screenshot evidence support remains available behind the stable demo path.
 
 ## Safety Boundaries
 
@@ -159,6 +180,7 @@ Strong category fit:
 - No fake ROAS winner prediction.
 - No claim to be the first Meta CLI agent.
 - Human approval is required before any real platform activation.
+- Live Gemini reasoning is separated from execution safety; code-level causal checks decide whether the final workspace is coherent.
 
 ## Verification
 
@@ -174,4 +196,12 @@ curl http://localhost:8080/api/health
 curl -X POST http://localhost:8080/api/workspace/analyze \
   -H "content-type: application/json" \
   -d '{"product":"AI Resume Optimizer","budget_usd":500,"demo_mode":true}'
+```
+
+Live Gemini evidence in PM2 logs should include:
+
+```text
+ai_overlay text_preview="Evidence: ..."
+provenance source=vertex-ai-text-overlay fallback=false checks=6/6
+ai_overlay success decision=READY_PAUSED
 ```
