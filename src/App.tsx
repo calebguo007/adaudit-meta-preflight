@@ -1,462 +1,525 @@
-import { useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import './App.css'
 
-type StepId = 'brief' | 'evidence' | 'audit' | 'launch'
-type AuditStatus = 'pass' | 'warn' | 'fail'
-type Decision = 'HOLD' | 'FIX_FIRST' | 'READY_PAUSED'
+type Intake = {
+  product: string
+  product_url: string
+  landing_page: string
+  platform: string
+  budget_usd: number
+  objective: string
+  kpi_priority: string[]
+  audience: string
+  assets: string
+  competitors: string
+  constraints: string
+  pixel_status: string
+}
 
-type Auditor = {
+type Evidence = { source: string; finding: string; impact: string }
+type Hypothesis = { name: string; hook: string; emotion: string; proof: string; risk: string; success_metric: string }
+type Scenario = {
   id: string
   name: string
-  status: AuditStatus
-  headline: string
-  detail: string
-  metric: string
-}
-
-type Hypothesis = {
-  id: string
-  hook: string
-  audience: string
-  format: string
+  objective: string
+  budget_usd: number
+  structure: string
+  expected_signal: string
+  kpi_ranges: Record<string, string>
   risk: string
+  verdict: string
+  reason: string
 }
-
-const steps: Array<{ id: StepId; label: string; detail: string }> = [
-  { id: 'brief', label: 'Brief', detail: 'Campaign intent' },
-  { id: 'evidence', label: 'Evidence', detail: 'Gemini + Ad Library' },
-  { id: 'audit', label: 'Audit Board', detail: '5 auditor agents' },
-  { id: 'launch', label: 'Paused Launch', detail: 'Meta executor' },
-]
-
-const badBrief =
-  'Launch a $500 Meta test for my AI resume optimizer targeting US job seekers. Promise they can land a job in 7 days.'
-
-const fixedBrief =
-  'Launch a $500 paused Meta lead test for an AI resume optimizer. Target US job seekers and early-career founders with proof-first hooks and no guaranteed employment outcome claims.'
-
-const initialAuditors: Auditor[] = [
-  {
-    id: 'pixel',
-    name: 'PixelAuditor',
-    status: 'fail',
-    headline: 'No conversion signal ready',
-    detail:
-      'The lead event has not fired in the last 14 days, so a conversion objective would enter learning without reliable feedback.',
-    metric: '0 recent lead events',
-  },
-  {
-    id: 'audience',
-    name: 'AudienceAuditor',
-    status: 'warn',
-    headline: 'Audience is too broad and fragmented',
-    detail:
-      '“US job seekers” is too vague for a three-variant test. Split into two intent-led audiences before launch.',
-    metric: '67% overlap risk',
-  },
-  {
-    id: 'policy',
-    name: 'PolicyAuditor',
-    status: 'fail',
-    headline: 'Employment outcome claim is risky',
-    detail:
-      '“Land a job in 7 days” is a high-risk employment promise and could trigger review or rejection.',
-    metric: 'Policy risk 4.2',
-  },
-  {
-    id: 'budget',
-    name: 'BudgetAuditor',
-    status: 'fail',
-    headline: 'Budget cannot support the proposed test',
-    detail:
-      '$500 split across three conversion variants is unlikely to collect enough signal for a confident decision.',
-    metric: '~143 click estimate',
-  },
-  {
-    id: 'creative',
-    name: 'CreativeAuditor',
-    status: 'warn',
-    headline: 'Hook is outside category norm',
-    detail:
-      'Competitor evidence favors proof-first resume score improvements over guaranteed employment promises.',
-    metric: '18 ads compared',
-  },
-]
-
-const fixedAuditors: Auditor[] = [
-  {
-    id: 'pixel',
-    name: 'PixelAuditor',
-    status: 'warn',
-    headline: 'Use Leads objective until signal improves',
-    detail:
-      'The plan switches from conversion optimization to a lead objective while the pixel warms up.',
-    metric: 'Safe fallback',
-  },
-  {
-    id: 'audience',
-    name: 'AudienceAuditor',
-    status: 'pass',
-    headline: 'Two focused audiences are ready',
-    detail:
-      'Audience split is now early-career job seekers and founder/operator job switchers, reducing fragmentation.',
-    metric: '2 clean ad sets',
-  },
-  {
-    id: 'policy',
-    name: 'PolicyAuditor',
-    status: 'pass',
-    headline: 'Outcome claim removed',
-    detail:
-      'Creative now promises resume clarity and ATS readiness, not a guaranteed job outcome.',
-    metric: 'Low risk',
-  },
-  {
-    id: 'budget',
-    name: 'BudgetAuditor',
-    status: 'warn',
-    headline: 'Lean test structure approved',
-    detail:
-      '$500 is now allocated across two hypotheses with hold thresholds instead of three conversion variants.',
-    metric: '$250/ad set',
-  },
-  {
-    id: 'creative',
-    name: 'CreativeAuditor',
-    status: 'pass',
-    headline: 'Proof-first creative matched',
-    detail:
-      'Hooks now mirror active category patterns: score lift, before/after proof, and ATS clarity.',
-    metric: '3 variants ready',
-  },
-]
-
-const evidence = [
-  {
-    brand: 'ResumeLift',
-    hook: 'Before/after ATS score proof',
-    note: 'Uses measurable improvement, not job guarantees.',
-    tone: 'Proof-first',
-  },
-  {
-    brand: 'CareerPilot',
-    hook: 'Avoid the resume black hole',
-    note: 'Targets rejection anxiety without promising outcomes.',
-    tone: 'Pain-aware',
-  },
-  {
-    brand: 'HireReady',
-    hook: 'Know what the robot sees',
-    note: 'Positions ATS as the obstacle and the product as the scanner.',
-    tone: 'Enemy frame',
-  },
-]
-
-const hypotheses: Hypothesis[] = [
-  {
-    id: 'H1',
-    hook: 'Raise your ATS score before you apply',
-    audience: 'Early-career job seekers',
-    format: 'Meta static proof ad',
-    risk: 'Low policy risk',
-  },
-  {
-    id: 'H2',
-    hook: 'See what resume robots reject',
-    audience: 'Founder/operator job switchers',
-    format: 'Carousel teardown',
-    risk: 'Moderate fatigue risk',
-  },
-  {
-    id: 'H3',
-    hook: 'Fix the missing keywords in 5 minutes',
-    audience: 'Remote SaaS applicants',
-    format: 'UGC script',
-    risk: 'Needs softer claim',
-  },
-]
-
-const commandLines = [
-  'meta-ads campaign create --name "AA_2026-05-13_ATS_Lead_Test" --objective LEADS --status PAUSED',
-  'meta-ads adset create --campaign-id 23868140291 --budget 25000 --audience early-career-us --status PAUSED',
-  'meta-ads ad create --adset-id 23868140292 --creative-id 23868140295 --status PAUSED',
-]
-
-function statusLabel(status: AuditStatus) {
-  if (status === 'pass') return 'PASS'
-  if (status === 'warn') return 'WARN'
-  return 'FAIL'
-}
-
-function decisionCopy(decision: Decision) {
-  if (decision === 'READY_PAUSED') {
-    return {
-      title: 'READY_PAUSED · Safe to create as paused',
-      body: 'The corrected plan can be built in Meta as paused objects. Human approval is still required before spend.',
-    }
+type AdSet = { name: string; audience: string; budget_usd: number; creative_hypothesis: string; optimization_goal: string }
+type AuditorReview = { auditor: string; status: 'pass' | 'warn' | 'fail'; finding: string; mitigation: string }
+type Workspace = {
+  intake_summary: {
+    product: string
+    platform: string
+    budget_usd: number
+    objective: string
+    kpi_priority: string[]
+    audience: string
+    constraints: string[]
   }
-  return {
-    title: 'HOLD · Not safe to launch yet',
-    body: 'AdAudit found structural campaign risks. It will not create launch-ready ads until the brief is fixed.',
+  evidence: Evidence[]
+  creative_hypotheses: Hypothesis[]
+  scenarios: Scenario[]
+  recommended_plan: {
+    scenario_id: string
+    why_this_wins: string[]
+    why_others_lose: string[]
+    campaign_name: string
+    ad_sets: AdSet[]
+  }
+  auditor_reviews: AuditorReview[]
+  final_decision: { status: 'HOLD' | 'FIX_FIRST' | 'READY_PAUSED'; summary: string; human_approval_required: boolean }
+  paused_execution_spec: {
+    status: string
+    executor_mode: string
+    campaign: { name: string; objective: string; status: string }
+    safety_notes: string[]
   }
 }
+type ExecutorResult = { executor_mode: string; status: string; campaign_id: string; adset_ids: string[]; ad_ids: string[]; note: string }
+type AiInfo = { baseUrl?: string; model?: string; hasKey?: boolean }
 
-function ShieldIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3l7 3v5.4c0 4.6-2.9 7.6-7 9.6-4.1-2-7-5-7-9.6V6l7-3z" />
-      <path d="M9.2 12.1l1.8 1.8 4-4" />
-    </svg>
-  )
+const defaultIntake: Intake = {
+  product: 'AI Resume Optimizer',
+  product_url: 'https://example.com/resume-ai',
+  landing_page: 'Hero promises resume clarity and ATS readiness. CTA is "Get my resume audit". No job guarantee on the page.',
+  platform: 'Meta',
+  budget_usd: 500,
+  objective: 'Lead generation',
+  kpi_priority: ['CPA', 'CTR', 'CPC'],
+  audience: 'US early-career job seekers and career switchers, age 22-45',
+  assets: 'Static resume before/after mockup, proof-first copy, one risky draft saying "land a job in 7 days".',
+  competitors: 'Teal, Rezi, Kickresume, Resume Worded',
+  constraints: 'No automatic spend. Avoid guaranteed employment outcomes. Keep first flight under $500.',
+  pixel_status: 'unknown',
 }
 
-function WarningIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3.5l9 16H3l9-16z" />
-      <path d="M12 9v4.3" />
-      <path d="M12 17h.01" />
-    </svg>
-  )
+function providerName(baseUrl?: string) {
+  if (!baseUrl) return 'AI provider'
+  if (baseUrl.includes('vultrinference')) return 'Vultr Serverless Inference'
+  if (baseUrl.includes('tokendance')) return 'DeepSeek gateway'
+  if (baseUrl.includes('openai')) return 'OpenAI'
+  try { return new URL(baseUrl).hostname } catch { return 'AI provider' }
 }
 
-function TerminalIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 5h16v14H4z" />
-      <path d="M7.5 9l2.5 2.5L7.5 14" />
-      <path d="M12 15h4.5" />
-    </svg>
-  )
+function statusClass(status?: string) {
+  if (status === 'pass' || status === 'READY_PAUSED' || status === 'recommended' || status === 'low') return 'good'
+  if (status === 'warn' || status === 'FIX_FIRST' || status === 'viable' || status === 'medium') return 'warn'
+  if (status === 'fail' || status === 'HOLD' || status === 'not_recommended' || status === 'high') return 'bad'
+  return 'neutral'
+}
+
+function formatStatus(status?: string) {
+  if (!status) return ''
+  return status.replace(/_/g, ' ').toUpperCase()
+}
+
+function compactStatus(status?: string) {
+  if (status === 'not_recommended') return 'NOT REC.'
+  if (status === 'recommended') return 'RECOMMENDED'
+  return formatStatus(status)
+}
+
+function money(n?: number) {
+  return typeof n === 'number' ? `$${n.toLocaleString()}` : '-'
 }
 
 function App() {
-  const [activeStep, setActiveStep] = useState<StepId>('audit')
-  const [brief, setBrief] = useState(badBrief)
-  const [fixed, setFixed] = useState(false)
-  const [executed, setExecuted] = useState(false)
+  const [intake, setIntake] = useState<Intake>(defaultIntake)
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [executor, setExecutor] = useState<ExecutorResult | null>(null)
+  const [ai, setAi] = useState<AiInfo>({})
+  const [loading, setLoading] = useState(false)
+  const [executing, setExecuting] = useState(false)
+  const [error, setError] = useState('')
+  const [analysisMode, setAnalysisMode] = useState<'live' | 'demo' | null>(null)
 
-  const auditors = fixed ? fixedAuditors : initialAuditors
-  const decision: Decision = fixed ? 'READY_PAUSED' : 'HOLD'
-  const decisionText = decisionCopy(decision)
-  const failCount = auditors.filter((auditor) => auditor.status === 'fail').length
-  const warnCount = auditors.filter((auditor) => auditor.status === 'warn').length
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((data) => setAi(data.ai || {}))
+      .catch(() => setAi({}))
+  }, [])
 
-  const activeIndex = steps.findIndex((step) => step.id === activeStep)
-  const executorMode = useMemo(() => (executed ? 'mock executor · Meta-compatible response' : 'pending'), [executed])
+  const recommended = useMemo(
+    () => workspace?.scenarios.find((s) => s.id === workspace.recommended_plan.scenario_id),
+    [workspace],
+  )
 
-  const runAudit = () => {
-    setActiveStep('audit')
-    setFixed(false)
-    setExecuted(false)
-    setBrief(badBrief)
+  async function analyze(demoMode = false) {
+    setLoading(true)
+    setError('')
+    setExecutor(null)
+    try {
+      const res = await fetch('/api/workspace/analyze', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...intake, demo_mode: demoMode }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+      setWorkspace(data.workspace)
+      setAnalysisMode(demoMode ? 'demo' : 'live')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Analysis failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const applyFix = () => {
-    setActiveStep('launch')
-    setFixed(true)
-    setExecuted(false)
-    setBrief(fixedBrief)
+  async function executePaused() {
+    if (!workspace) return
+    setExecuting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/campaign/execute', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'PAUSED', plan: workspace.paused_execution_spec }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Execution failed')
+      setExecutor(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Execution failed')
+    } finally {
+      setExecuting(false)
+    }
   }
 
-  const executePaused = () => {
-    setActiveStep('launch')
-    setFixed(true)
-    setExecuted(true)
+  function patch<K extends keyof Intake>(key: K, value: Intake[K]) {
+    setIntake((prev) => ({ ...prev, [key]: value }))
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar" aria-label="AdAudit navigation">
-        <div className="brand">
-          <div className="brand-mark">
-            <ShieldIcon />
-          </div>
+    <main className="workspace-shell">
+      <aside className="workspace-rail">
+        <div className="brand-lockup">
+          <div className="brand-mark">AA</div>
           <div>
             <strong>AdAudit</strong>
-            <span>Meta preflight lab</span>
+            <span>Guarded media buyer</span>
           </div>
         </div>
 
-        <nav className="step-list">
-          {steps.map((step, index) => (
-            <button
-              className={`step ${step.id === activeStep ? 'active' : ''} ${index < activeIndex ? 'done' : ''}`}
-              key={step.id}
-              type="button"
-              onClick={() => setActiveStep(step.id)}
-            >
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <div>
-                <strong>{step.label}</strong>
-                <small>{step.detail}</small>
-              </div>
-            </button>
+        <nav className="rail-steps" aria-label="Workflow">
+          {['Intake', 'Research', 'Simulation', 'Guardrails', 'Paused Spec'].map((step, index) => (
+            <span className={workspace || index === 0 ? 'active' : ''} key={step}>
+              <em>{String(index + 1).padStart(2, '0')}</em>
+              {step}
+            </span>
           ))}
         </nav>
 
-        <div className="sidebar-note">
-          <strong>Vultr-ready backend</strong>
-          <span>Node API exposes brief parsing, evidence analysis, multi-agent preflight, fixes, and paused execution.</span>
+        <div className="rail-note">
+          <strong>Safety model</strong>
+          <p>Read and simulation are safe. Execution is dry-run shaped and always creates PAUSED objects only.</p>
         </div>
       </aside>
 
-      <section className="workspace">
-        <header className="topbar">
+      <section className="workspace-main">
+        <header className="workspace-hero">
           <div>
-            <h1>Most AI ad tools help you launch faster. AdAudit tells you when not to launch.</h1>
-            <p>
-              A collaborative system of auditor agents reviews Meta campaign briefs, blocks unsafe launches, and
-              prepares paused campaigns only after the risks are fixed.
+            <p className="eyebrow">ADAUDIT / MEDIA BUYING WORKSPACE / V0.3</p>
+            <h1>Simulate the media buy before the agent spends.</h1>
+            <p className="hero-copy">
+              Enter product, assets, budget, audience, and KPI priorities. AdAudit researches the evidence, compares
+              three campaign options, recommends the cheapest viable Meta test, then audits the plan before paused execution.
             </p>
           </div>
-          <div className="topbar-actions">
-            <button type="button" className="ghost-button" onClick={runAudit}>
-              Run bad brief
-            </button>
-            <button type="button" className="primary-button" onClick={applyFix}>
-              Auto-fix plan
-            </button>
+          <div className="provider-card">
+            <span>POWERED BY</span>
+            <strong>{providerName(ai.baseUrl)}</strong>
+            <small>{ai.model || 'model pending'}</small>
           </div>
         </header>
 
-        <section className="brief-strip" aria-label="Current brief">
-          <div className="brief-card">
-            <span>Current brief</span>
-            <p>{brief}</p>
-          </div>
-          <div className={`decision-card ${decision.toLowerCase()}`}>
-            <div className="decision-icon">
-              {decision === 'READY_PAUSED' ? <ShieldIcon /> : <WarningIcon />}
-            </div>
-            <div>
-              <strong>{decisionText.title}</strong>
-              <span>{decisionText.body}</span>
-            </div>
-          </div>
-        </section>
+        {error && <div className="error-banner">{error}</div>}
 
-        <section className="main-grid">
-          <div className="audit-board">
-            <div className="section-heading">
+        <section className="workspace-grid">
+          <motion.form
+            className="panel intake-panel"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            onSubmit={(e) => { e.preventDefault(); void analyze() }}
+          >
+            <PanelTitle label="Campaign Intake" detail="The real user entry point" />
+
+            <Field label="Product">
+              <input value={intake.product} onChange={(e) => patch('product', e.target.value)} />
+            </Field>
+            <Field label="Product URL">
+              <input value={intake.product_url} onChange={(e) => patch('product_url', e.target.value)} />
+            </Field>
+            <div className="field-row">
+              <Field label="Platform">
+                <select value={intake.platform} onChange={(e) => patch('platform', e.target.value)}>
+                  <option>Meta</option>
+                  <option disabled>Google - next</option>
+                  <option disabled>TikTok - next</option>
+                </select>
+              </Field>
+              <Field label="Budget">
+                <input
+                  type="number"
+                  min={100}
+                  value={intake.budget_usd}
+                  onChange={(e) => patch('budget_usd', Number(e.target.value))}
+                />
+              </Field>
+            </div>
+            <div className="field-row">
+              <Field label="Objective">
+                <select value={intake.objective} onChange={(e) => patch('objective', e.target.value)}>
+                  <option>Lead generation</option>
+                  <option>Traffic</option>
+                  <option>Purchases</option>
+                  <option>Demos</option>
+                  <option>Awareness</option>
+                </select>
+              </Field>
+              <Field label="Pixel status">
+                <select value={intake.pixel_status} onChange={(e) => patch('pixel_status', e.target.value)}>
+                  <option value="unknown">Unknown</option>
+                  <option value="missing">Missing</option>
+                  <option value="verified">Verified</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="KPI priority">
+              <input
+                value={intake.kpi_priority.join(', ')}
+                onChange={(e) => patch('kpi_priority', e.target.value.split(',').map((v) => v.trim()).filter(Boolean))}
+              />
+            </Field>
+            <Field label="Audience">
+              <textarea value={intake.audience} onChange={(e) => patch('audience', e.target.value)} rows={3} />
+            </Field>
+            <Field label="Landing page evidence">
+              <textarea value={intake.landing_page} onChange={(e) => patch('landing_page', e.target.value)} rows={3} />
+            </Field>
+            <Field label="Assets and copy">
+              <textarea value={intake.assets} onChange={(e) => patch('assets', e.target.value)} rows={3} />
+            </Field>
+            <Field label="Competitors">
+              <input value={intake.competitors} onChange={(e) => patch('competitors', e.target.value)} />
+            </Field>
+            <Field label="Constraints">
+              <textarea value={intake.constraints} onChange={(e) => patch('constraints', e.target.value)} rows={3} />
+            </Field>
+
+            <div className="action-row">
+              <button className="primary-action" disabled={loading} type="submit">
+                {loading ? 'Simulating media buy...' : 'Build with live AI'}
+              </button>
+              <button className="ghost-action" disabled={loading} onClick={() => void analyze(true)} type="button">
+                Instant demo
+              </button>
+            </div>
+          </motion.form>
+
+          <section className="workspace-results">
+            <div className="decision-strip">
               <div>
-                <h2>Collaborative Preflight Audit</h2>
-                <p>Five specialized agents examine the same brief and share findings with the coordinator.</p>
+                <span>FINAL RECOMMENDATION</span>
+                <strong className={statusClass(workspace?.final_decision.status)}>
+                  {formatStatus(workspace?.final_decision.status) || 'WAITING FOR INTAKE'}
+                </strong>
+                {analysisMode && <small>{analysisMode === 'live' ? 'Live AI analysis' : 'Instant playbook demo'}</small>}
               </div>
-              <div className="summary-pills">
-                <span className="fail">{failCount} fail</span>
-                <span className="warn">{warnCount} warn</span>
-                <span>{auditors.length} auditors</span>
-              </div>
+              <p>{workspace?.final_decision.summary || 'Run the workspace to compare campaign options and produce a paused execution spec.'}</p>
             </div>
 
-            <div className="auditor-grid">
-              {auditors.map((auditor) => (
-                <article className={`auditor-card ${auditor.status}`} key={auditor.id}>
-                  <div className="auditor-header">
-                    <div>
-                      <strong>{auditor.name}</strong>
-                      <span>{auditor.metric}</span>
-                    </div>
-                    <em>{statusLabel(auditor.status)}</em>
-                  </div>
-                  <h3>{auditor.headline}</h3>
-                  <p>{auditor.detail}</p>
-                </article>
+            <div className="result-grid three">
+              {(workspace?.scenarios || placeholderScenarios).map((scenario) => (
+                <ScenarioCard scenario={scenario} key={scenario.id} active={scenario.id === workspace?.recommended_plan.scenario_id} />
               ))}
             </div>
 
-            <div className="evidence-panel">
-              <div className="section-heading compact">
+            <div className="result-grid two">
+              <section className="panel">
+                <PanelTitle label="Evidence Board" detail="What the agents used" />
+                <div className="stack">
+                  {(workspace?.evidence || placeholderEvidence).map((item, index) => (
+                    <article className="evidence-card" key={`${item.source}-${index}`}>
+                      <span>{item.source}</span>
+                      <strong>{item.finding}</strong>
+                      <p>{item.impact}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="panel">
+                <PanelTitle label="Creative Hypotheses" detail="Testable angles, not final assets" />
+                <div className="stack">
+                  {(workspace?.creative_hypotheses || placeholderHypotheses).map((item) => (
+                    <article className="hypothesis-card" key={item.name}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span className={statusClass(item.risk)}>{item.risk}</span>
+                      </div>
+                      <p>{item.hook}</p>
+                      <small>{item.proof} / {item.success_metric}</small>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <section className="panel recommendation-panel">
+              <PanelTitle label="Best Plan" detail={recommended ? recommended.name : 'No recommendation yet'} />
+              <div className="recommendation-grid">
                 <div>
-                  <h2>Gemini + Ad Library Evidence</h2>
-                  <p>Category evidence makes the refusal explainable instead of arbitrary.</p>
+                  <h2>{workspace?.recommended_plan.campaign_name || 'Run analysis to generate a campaign spec'}</h2>
+                  <ul>
+                    {(workspace?.recommended_plan.why_this_wins || ['The recommended plan will explain why it is the cheapest viable test.']).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="adset-list">
+                  {(workspace?.recommended_plan.ad_sets || []).map((adSet) => (
+                    <article key={adSet.name}>
+                      <strong>{adSet.name}</strong>
+                      <span>{money(adSet.budget_usd)} / {adSet.optimization_goal}</span>
+                      <p>{adSet.audience}</p>
+                      <small>{adSet.creative_hypothesis}</small>
+                    </article>
+                  ))}
                 </div>
               </div>
-              <div className="evidence-row">
-                {evidence.map((item, index) => (
-                  <article className="evidence-card" key={item.brand}>
-                    <div className={`ad-thumb ad-thumb-${index + 1}`}>
-                      <span>{item.brand}</span>
-                    </div>
-                    <div>
-                      <strong>{item.hook}</strong>
-                      <span>{item.tone}</span>
-                      <p>{item.note}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </div>
+            </section>
 
-          <aside className="launch-panel">
-            <div className="launch-status">
-              <span>Campaign plan</span>
-              <strong>{fixed ? 'Ready as PAUSED' : 'Held before build'}</strong>
-            </div>
+            <div className="result-grid two">
+              <section className="panel">
+                <PanelTitle label="Guardrail Review" detail="Five specialist checks" />
+                <div className="auditor-grid">
+                  {(workspace?.auditor_reviews || placeholderAuditors).map((review) => (
+                    <article className={`auditor-card ${statusClass(review.status)}`} key={review.auditor}>
+                      <span>{review.auditor}</span>
+                      <strong>{review.finding}</strong>
+                      <p>{review.mitigation}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
-            <div className="plan-metrics">
-              <div>
-                <span>Budget</span>
-                <strong>$500</strong>
-              </div>
-              <div>
-                <span>Objective</span>
-                <strong>{fixed ? 'Leads' : 'Conversions'}</strong>
-              </div>
-              <div>
-                <span>Status</span>
-                <strong>PAUSED</strong>
-              </div>
-            </div>
-
-            <div className="hypothesis-list">
-              <h2>Fixed hypotheses</h2>
-              {hypotheses.map((hypothesis) => (
-                <article key={hypothesis.id}>
-                  <span>{hypothesis.id}</span>
-                  <div>
-                    <strong>{hypothesis.hook}</strong>
-                    <p>{hypothesis.audience} · {hypothesis.format}</p>
-                    <small>{hypothesis.risk}</small>
+              <section className="panel executor-panel">
+                <PanelTitle label="Paused Execution" detail="Dry-run shaped Meta output" />
+                <code>campaign.name = {workspace?.paused_execution_spec.campaign.name || '<pending>'}</code>
+                <code>campaign.objective = {workspace?.paused_execution_spec.campaign.objective || '<pending>'}</code>
+                <code>campaign.status = PAUSED</code>
+                <button
+                  className="secondary-action"
+                  disabled={!workspace || executing}
+                  onClick={() => void executePaused()}
+                  type="button"
+                >
+                  {executing ? 'Creating paused objects...' : 'Create paused campaign objects'}
+                </button>
+                {executor && (
+                  <div className="executor-output">
+                    <strong>campaign_id={executor.campaign_id}</strong>
+                    {executor.adset_ids.map((id) => <span key={id}>adset_id={id}</span>)}
+                    {executor.ad_ids.map((id) => <span key={id}>ad_id={id}</span>)}
+                    <em>status={executor.status}</em>
                   </div>
-                </article>
-              ))}
+                )}
+                <p>
+                  {workspace?.paused_execution_spec.safety_notes?.join(' ') ||
+                    'Execution stays disabled until a plan has been simulated and reviewed.'}
+                </p>
+              </section>
             </div>
-
-            <div className="terminal-box">
-              <div className="terminal-title">
-                <TerminalIcon />
-                <span>Meta executor preview</span>
-              </div>
-              {commandLines.map((line) => (
-                <code key={line}>{line}</code>
-              ))}
-              {executed && (
-                <div className="executor-result">
-                  <span>campaign_id=23868140291</span>
-                  <span>adset_id=23868140292</span>
-                  <span>ad_id=23868140296</span>
-                  <strong>status=PAUSED</strong>
-                </div>
-              )}
-            </div>
-
-            <div className="launch-actions">
-              <button type="button" className="ghost-button" onClick={applyFix}>
-                Repair brief
-              </button>
-              <button type="button" className="primary-button" disabled={!fixed} onClick={executePaused}>
-                Create paused campaign
-              </button>
-            </div>
-            <p className="executor-mode">Executor mode: {executorMode}</p>
-          </aside>
+          </section>
         </section>
       </section>
     </main>
   )
 }
+
+function PanelTitle({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="panel-title">
+      <span>{label}</span>
+      <small>{detail}</small>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function ScenarioCard({ scenario, active }: { scenario: Scenario; active?: boolean }) {
+  return (
+    <article className={`scenario-card ${statusClass(scenario.verdict)} ${active ? 'selected' : ''}`}>
+      <div>
+        <span>{scenario.id}</span>
+        <em>{compactStatus(scenario.verdict)}</em>
+      </div>
+      <h3>{scenario.name}</h3>
+      <strong>{money(scenario.budget_usd)} / {scenario.objective}</strong>
+      <p>{scenario.structure}</p>
+      <small>{scenario.expected_signal}</small>
+      <dl>
+        {Object.entries(scenario.kpi_ranges || {}).map(([key, value]) => (
+          <div key={key}>
+            <dt>{key.toUpperCase()}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="scenario-reason">{scenario.reason}</p>
+    </article>
+  )
+}
+
+const placeholderScenarios: Scenario[] = [
+  {
+    id: 'validation',
+    name: 'Cheap validation test',
+    objective: 'TRAFFIC',
+    budget_usd: 0,
+    structure: 'Waiting for intake.',
+    expected_signal: 'Run analysis to estimate signal.',
+    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
+    risk: 'low',
+    verdict: 'pending',
+    reason: 'No simulation has run yet.',
+  },
+  {
+    id: 'balanced',
+    name: 'Balanced learning test',
+    objective: 'LEADS',
+    budget_usd: 0,
+    structure: 'Waiting for intake.',
+    expected_signal: 'Run analysis to estimate signal.',
+    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
+    risk: 'medium',
+    verdict: 'pending',
+    reason: 'No simulation has run yet.',
+  },
+  {
+    id: 'aggressive',
+    name: 'Aggressive conversion test',
+    objective: 'CONVERSIONS',
+    budget_usd: 0,
+    structure: 'Waiting for intake.',
+    expected_signal: 'Run analysis to estimate signal.',
+    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
+    risk: 'high',
+    verdict: 'pending',
+    reason: 'No simulation has run yet.',
+  },
+]
+
+const placeholderEvidence: Evidence[] = [
+  { source: 'product', finding: 'No workspace analysis yet.', impact: 'The agent needs product, budget, audience, and asset context.' },
+]
+
+const placeholderHypotheses: Hypothesis[] = [
+  { name: 'Awaiting research', hook: 'Creative hypotheses appear after analysis.', emotion: '-', proof: '-', risk: 'neutral', success_metric: '-' },
+]
+
+const placeholderAuditors: AuditorReview[] = [
+  { auditor: 'TrackingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+  { auditor: 'AudienceAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+  { auditor: 'BudgetAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+  { auditor: 'PolicyAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+  { auditor: 'CreativeLandingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+]
 
 export default App
