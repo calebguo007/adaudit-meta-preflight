@@ -67,6 +67,47 @@ type MonitoringWindow = {
   window: string
   checks: string[]
 }
+type EvidenceArtifact = {
+  type: string
+  label: string
+  uri: string
+  text_uri?: string
+  source_url?: string
+  summary: string
+}
+type EvidenceArtifacts = {
+  job_id: string
+  mode: string
+  artifacts: EvidenceArtifact[]
+  structured_evidence: {
+    hook_patterns?: string[]
+    risky_claims?: string[]
+    cta?: string
+    proof_mechanisms?: string[]
+    landing_page_gaps?: string[]
+    implications?: string[]
+  }
+  notes: string[]
+}
+type AgentTimelineItem = {
+  agent: string
+  status: 'pass' | 'watch' | 'block'
+  finding: string
+  impact: string
+  affects: string[]
+}
+type PlanDiff = {
+  status: string
+  summary: string
+  items: { field: string; before: string; after: string; reason: string }[]
+}
+type CausalCheck = {
+  id: string
+  passed: boolean
+  expected: string | number
+  actual: string | number
+  detail: string
+}
 type Scenario = {
   id: string
   name: string
@@ -92,7 +133,11 @@ type Workspace = {
     constraints: string[]
   }
   evidence: Evidence[]
+  evidence_artifacts?: EvidenceArtifacts
   creative_hypotheses: Hypothesis[]
+  agent_timeline?: AgentTimelineItem[]
+  plan_diff?: PlanDiff
+  causal_checks?: CausalCheck[]
   strategy_agents?: StrategyAgent[]
   market_research?: MarketResearch
   delivery_readiness?: DeliveryReadiness
@@ -102,6 +147,7 @@ type Workspace = {
   scenarios: Scenario[]
   recommended_plan: {
     scenario_id: string
+    objective?: string
     why_this_wins: string[]
     why_others_lose: string[]
     campaign_name: string
@@ -250,7 +296,7 @@ function App() {
         </div>
 
         <nav className="rail-steps" aria-label="Workflow">
-          {['Intake', 'Research', 'Simulation', 'Guardrails', 'Paused Spec'].map((step, index) => (
+          {['Intake', 'Evidence', 'Timeline', 'Plan Diff', 'Paused Spec'].map((step, index) => (
             <span className={workspace || index === 0 ? 'active' : ''} key={step}>
               <em>{String(index + 1).padStart(2, '0')}</em>
               {step}
@@ -270,8 +316,8 @@ function App() {
             <p className="eyebrow">ADAUDIT / MEDIA BUYING WORKSPACE / V0.3</p>
             <h1>Simulate the media buy before the agent spends.</h1>
             <p className="hero-copy">
-              Enter product, assets, budget, audience, and KPI priorities. AdAudit researches the evidence, compares
-              three campaign options, recommends the cheapest viable Meta test, then audits the plan before paused execution.
+              One API call runs evidence collection, media planning, budget economics, delivery checks, repair diff, and
+              paused execution prep. The timeline shows how each agent changes the next decision.
             </p>
           </div>
           <div className="provider-card">
@@ -429,6 +475,59 @@ function App() {
               ))}
             </div>
 
+            <section className="panel timeline-panel">
+              <PanelTitle label="Agent Timeline" detail="Single-entry orchestration with visible causal chain" />
+              <div className="timeline-list">
+                {(workspace?.agent_timeline || placeholderTimeline).map((item, index) => (
+                  <motion.article
+                    className={`timeline-item ${statusClass(item.status)}`}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: workspace ? index * 0.12 : 0 }}
+                    key={`${item.agent}-${index}`}
+                  >
+                    <div className="timeline-index">{String(index + 1).padStart(2, '0')}</div>
+                    <div>
+                      <header>
+                        <strong>{item.agent}</strong>
+                        <span>{formatStatus(item.status)}</span>
+                      </header>
+                      <p>{item.finding}</p>
+                      <small>{item.impact}</small>
+                      <em>affects: {item.affects.join(' -> ')}</em>
+                    </div>
+                  </motion.article>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel diff-panel">
+              <PanelTitle label="FIX_FIRST Before / After" detail={workspace?.plan_diff?.status || 'Plan repair diff appears after analysis'} />
+              <p className="diff-summary">
+                {workspace?.plan_diff?.summary || 'The Coordinator will show exactly what changed before the plan becomes READY_PAUSED.'}
+              </p>
+              <div className="diff-grid">
+                {(workspace?.plan_diff?.items || placeholderDiff.items).map((item) => (
+                  <article className="diff-card" key={item.field}>
+                    <span>{item.field}</span>
+                    <div className="diff-values">
+                      <strong className="before">{item.before}</strong>
+                      <b>→</b>
+                      <strong className="after">{item.after}</strong>
+                    </div>
+                    <p>{item.reason}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="causal-checks">
+                {(workspace?.causal_checks || placeholderCausalChecks).map((check) => (
+                  <span className={check.passed ? 'good' : 'bad'} key={check.id}>
+                    {check.passed ? 'PASS' : 'FAIL'} / {check.detail}
+                  </span>
+                ))}
+              </div>
+            </section>
+
             <section className="panel strategy-console">
               <PanelTitle label="Media Strategy Console" detail="Research, delivery, economics, and budget signal" />
               <div className="strategy-grid">
@@ -492,13 +591,24 @@ function App() {
 
             <div className="result-grid two">
               <section className="panel">
-                <PanelTitle label="Evidence Board" detail="What the agents used" />
+                <PanelTitle
+                  label="Evidence Board"
+                  detail={workspace?.evidence_artifacts ? `${workspace.evidence_artifacts.mode} / ${workspace.evidence_artifacts.job_id}` : 'What the agents used'}
+                />
                 <div className="stack">
                   {(workspace?.evidence || placeholderEvidence).map((item, index) => (
                     <article className="evidence-card" key={`${item.source}-${index}`}>
                       <span>{item.source}</span>
                       <strong>{item.finding}</strong>
                       <p>{item.impact}</p>
+                    </article>
+                  ))}
+                  {(workspace?.evidence_artifacts?.artifacts || []).slice(0, 3).map((artifact) => (
+                    <article className="evidence-card artifact-card" key={`${artifact.type}-${artifact.uri}`}>
+                      <span>{artifact.type}</span>
+                      <strong>{artifact.label}</strong>
+                      <p>{artifact.summary}</p>
+                      <small>{artifact.source_url || artifact.uri}</small>
                     </article>
                   ))}
                 </div>
@@ -728,6 +838,53 @@ const placeholderEvidence: Evidence[] = [
 
 const placeholderHypotheses: Hypothesis[] = [
   { name: 'Awaiting research', hook: 'Creative hypotheses appear after analysis.', emotion: '-', proof: '-', risk: 'neutral', success_metric: '-' },
+]
+
+const placeholderTimeline: AgentTimelineItem[] = [
+  {
+    agent: 'EvidenceAgent',
+    status: 'watch',
+    finding: 'Awaiting product URL, competitor context, and asset claims.',
+    impact: 'Evidence will feed planning before any recommendation is made.',
+    affects: ['MediaPlannerAgent'],
+  },
+  {
+    agent: 'MediaPlannerAgent',
+    status: 'watch',
+    finding: 'Awaiting evidence to generate three candidate plans.',
+    impact: 'The planner will create alternatives that can be rejected or repaired.',
+    affects: ['BudgetEconomicsAgent', 'DeliveryReadinessAgent'],
+  },
+  {
+    agent: 'BudgetEconomicsAgent',
+    status: 'watch',
+    finding: 'Awaiting budget and unit economics.',
+    impact: 'The ad set limit and kill/scale thresholds will constrain the final plan.',
+    affects: ['CoordinatorAgent'],
+  },
+]
+
+const placeholderDiff: PlanDiff = {
+  status: 'PENDING',
+  summary: 'No repair diff yet.',
+  items: [
+    {
+      field: 'Objective',
+      before: 'pending',
+      after: 'pending',
+      reason: 'Run analysis to see how the Coordinator repairs the plan.',
+    },
+  ],
+}
+
+const placeholderCausalChecks: CausalCheck[] = [
+  {
+    id: 'pending_causal_chain',
+    passed: false,
+    expected: 'workspace analysis',
+    actual: 'not run',
+    detail: 'Run analysis to validate the agent causal chain.',
+  },
 ]
 
 const placeholderStrategyAgents: StrategyAgent[] = [

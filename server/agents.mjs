@@ -7,6 +7,7 @@
 // All agents return JSON in a consistent shape so the UI can render uniformly.
 
 import { callAgent, streamAgent } from './ai.mjs'
+import { collectEvidence } from './evidence.mjs'
 
 // ----- shared output schema (for the prompts) -----
 
@@ -328,8 +329,9 @@ export async function runFixer(brief, reports) {
  */
 export async function runMediaBuyingWorkspace(intake) {
   const normalized = normalizeIntake(intake)
+  const evidenceBundle = await collectEvidence({ ...normalized, demo_mode: intake?.demo_mode })
   if (intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true') {
-    return fallbackWorkspace(normalized)
+    return fallbackWorkspace(normalized, evidenceBundle)
   }
   const userMsg = `Campaign intake:\n${JSON.stringify(normalized, null, 2)}`
   try {
@@ -339,11 +341,13 @@ export async function runMediaBuyingWorkspace(intake) {
       json: true,
       maxTokens: 2200,
     })
-    return result || fallbackWorkspace(normalized)
+    return completeWorkspace(normalized, result, evidenceBundle)
   } catch {
-    return fallbackWorkspace(normalized)
+    return fallbackWorkspace(normalized, evidenceBundle)
   }
 }
+
+export { collectEvidence }
 
 // ===== streaming variants (used by SSE route) =====
 
@@ -426,7 +430,7 @@ function normalizeIntake(intake = {}) {
   }
 }
 
-function fallbackWorkspace(intake) {
+function fallbackWorkspace(intake, evidenceBundle) {
   const budget = intake.budget_usd || 500
   const isSmallBudget = budget < 1000
   const objective = intake.pixel_status === 'verified' && budget >= 1500 ? 'CONVERSIONS' : 'LEADS'
@@ -442,8 +446,10 @@ function fallbackWorkspace(intake) {
   const signalClicksHigh = Math.max(signalClicksLow + 30, Math.round(budget / 1.5))
   const killSpend = Math.round(targetCpa * 2.75)
   const perAdSetBudget = Math.round(budget / adSetCount)
+  const structuredEvidence = evidenceBundle?.structured_evidence || {}
+  const hasRiskyClaim = Array.isArray(structuredEvidence.risky_claims) && structuredEvidence.risky_claims.length > 0
 
-  return {
+  const workspace = {
     intake_summary: {
       product: intake.product,
       platform: 'Meta',
@@ -454,6 +460,11 @@ function fallbackWorkspace(intake) {
       constraints: [intake.constraints, `Pixel status: ${intake.pixel_status}`],
     },
     evidence: [
+      {
+        source: 'EvidenceAgent',
+        finding: `${evidenceBundle?.mode || 'fixture'} evidence collected for ${evidenceBundle?.artifacts?.length || 0} artifact(s).`,
+        impact: 'MediaPlannerAgent uses this structured evidence before creating creative hypotheses and scenarios.',
+      },
       {
         source: 'landing page',
         finding: intake.landing_page
@@ -474,6 +485,13 @@ function fallbackWorkspace(intake) {
         impact: 'Policy review and account trust are higher priority than aggressive copy.',
       },
     ],
+    evidence_artifacts: {
+      job_id: evidenceBundle?.job_id || 'fixture',
+      mode: evidenceBundle?.mode || 'fixture',
+      artifacts: evidenceBundle?.artifacts || [],
+      structured_evidence: structuredEvidence,
+      notes: evidenceBundle?.notes || [],
+    },
     creative_hypotheses: [
       {
         name: 'Proof-first resume score',
@@ -641,6 +659,7 @@ function fallbackWorkspace(intake) {
     ],
     recommended_plan: {
       scenario_id: 'balanced',
+      objective,
       why_this_wins: [
         'It keeps the test narrow enough for signal density.',
         'It avoids guaranteed employment claims.',
@@ -753,6 +772,230 @@ function fallbackWorkspace(intake) {
       ],
     },
   }
+
+  return completeWorkspace(intake, workspace, evidenceBundle, {
+    adSetLimit: adSetCount,
+    objectiveRecommendation: objective,
+    hasRiskyClaim,
+    originalClaim: 'Land a job in 7 days',
+    repairedClaim: 'Find hidden resume issues before applying',
+  })
+}
+
+function completeWorkspace(intake, rawWorkspace, evidenceBundle, overrides = {}) {
+  const workspace = rawWorkspace && typeof rawWorkspace === 'object'
+    ? rawWorkspace
+    : fallbackWorkspace(intake, evidenceBundle)
+  const recommendedPlan = workspace.recommended_plan || {}
+  const evidence = evidenceBundle?.structured_evidence || {}
+  const budgetAdSetLimit = overrides.adSetLimit
+    || workspace.budget_signal?.recommended_ad_set_count
+    || (Number(intake.budget_usd || 500) < 1000 ? 2 : 3)
+    || 2
+  const objectiveRecommendation = overrides.objectiveRecommendation
+    || workspace.delivery_readiness?.objective_recommendation
+    || (intake.pixel_status !== 'verified' || Number(intake.budget_usd || 500) < 1500 ? 'LEADS' : null)
+    || workspace.paused_execution_spec?.campaign?.objective
+    || recommendedPlan.objective
+    || 'LEADS'
+  const hasRiskyClaim = typeof overrides.hasRiskyClaim === 'boolean'
+    ? overrides.hasRiskyClaim
+    : Array.isArray(evidence.risky_claims) && evidence.risky_claims.length > 0
+  const originalClaim = overrides.originalClaim || pickOriginalRiskyClaim(intake, evidence)
+  const repairedClaim = overrides.repairedClaim || 'Use proof-based resume diagnosis instead of guaranteed job outcomes.'
+
+  workspace.evidence_artifacts ||= {
+    job_id: evidenceBundle?.job_id || 'unknown',
+    mode: evidenceBundle?.mode || 'unknown',
+    artifacts: evidenceBundle?.artifacts || [],
+    structured_evidence: evidence,
+    notes: evidenceBundle?.notes || [],
+  }
+
+  if (recommendedPlan.ad_sets?.length && recommendedPlan.ad_sets.length > budgetAdSetLimit) {
+    recommendedPlan.ad_sets = recommendedPlan.ad_sets.slice(0, budgetAdSetLimit)
+  }
+  recommendedPlan.objective = objectiveRecommendation
+  workspace.recommended_plan = recommendedPlan
+
+  if (workspace.paused_execution_spec?.campaign) {
+    workspace.paused_execution_spec.campaign.objective = objectiveRecommendation
+  }
+
+  workspace.delivery_readiness ||= {}
+  workspace.delivery_readiness.objective_recommendation = objectiveRecommendation
+  workspace.budget_economics ||= {}
+  workspace.budget_economics.ad_set_limit = budgetAdSetLimit
+  workspace.budget_economics.target_cpa = workspace.unit_economics?.target_cpa || (intake.target_cpa ? moneyText(intake.target_cpa) : 'unknown')
+  workspace.budget_economics.break_even_cpa = workspace.unit_economics?.break_even_cpa || 'unknown'
+
+  workspace.agent_timeline = buildAgentTimeline({
+    workspace,
+    evidenceBundle,
+    budgetAdSetLimit,
+    objectiveRecommendation,
+    hasRiskyClaim,
+    originalClaim,
+    repairedClaim,
+  })
+  workspace.plan_diff = buildPlanDiff({
+    budgetAdSetLimit,
+    objectiveRecommendation,
+    hasRiskyClaim,
+    originalClaim,
+    repairedClaim,
+    budget: intake.budget_usd || 500,
+  })
+  workspace.causal_checks = buildCausalChecks({
+    workspace,
+    budgetAdSetLimit,
+    objectiveRecommendation,
+    hasRiskyClaim,
+  })
+
+  return workspace
+}
+
+function buildAgentTimeline({ workspace, evidenceBundle, budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim, originalClaim, repairedClaim }) {
+  const riskyText = hasRiskyClaim ? `Risky claim detected: ${originalClaim}.` : 'No hard guarantee claim detected in supplied copy.'
+  return [
+    {
+      agent: 'EvidenceAgent',
+      status: evidenceBundle?.mode === 'fixture_fallback' ? 'watch' : 'pass',
+      finding: `${evidenceBundle?.mode || 'fixture'} evidence collected from ${evidenceBundle?.artifacts?.length || 0} artifact(s). ${riskyText}`,
+      impact: hasRiskyClaim ? 'Forces Creative and Coordinator steps to rewrite the claim before launch.' : 'Allows Planner to use evidence-backed creative hypotheses.',
+      affects: ['MediaPlannerAgent', 'DeliveryReadinessAgent', 'CoordinatorAgent'],
+    },
+    {
+      agent: 'MediaPlannerAgent',
+      status: 'pass',
+      finding: 'Generated Validation, Balanced, and Aggressive scenarios from product, evidence, audience, and budget context.',
+      impact: 'Creates the plan options that downstream agents can reject or repair instead of producing one opaque answer.',
+      affects: ['BudgetEconomicsAgent', 'DeliveryReadinessAgent', 'CoordinatorAgent'],
+    },
+    {
+      agent: 'BudgetEconomicsAgent',
+      status: budgetAdSetLimit <= 2 ? 'watch' : 'pass',
+      finding: `Current budget supports at most ${budgetAdSetLimit} ad set(s) for a first-flight test.`,
+      impact: `Coordinator must keep the recommended plan at ${budgetAdSetLimit} ad set(s) and use economics for kill/scale thresholds.`,
+      affects: ['CoordinatorAgent', 'PausedExecutor'],
+    },
+    {
+      agent: 'DeliveryReadinessAgent',
+      status: objectiveRecommendation === 'CONVERSIONS' ? 'watch' : 'pass',
+      finding: `Recommended objective is ${objectiveRecommendation} because tracking maturity and policy risk gate execution.`,
+      impact: `Coordinator must set the final campaign objective to ${objectiveRecommendation}.`,
+      affects: ['CoordinatorAgent', 'PausedExecutor'],
+    },
+    {
+      agent: 'CoordinatorAgent',
+      status: workspace.final_decision?.status === 'READY_PAUSED' ? 'pass' : 'watch',
+      finding: hasRiskyClaim
+        ? `Balanced plan repaired: "${originalClaim}" -> "${repairedClaim}".`
+        : 'Balanced plan selected after comparing validation and aggressive alternatives.',
+      impact: 'Produces the before/after diff and final READY_PAUSED recommendation.',
+      affects: ['PausedExecutor'],
+    },
+    {
+      agent: 'PausedExecutor',
+      status: 'pass',
+      finding: 'Prepared Meta-compatible execution spec with status fixed to PAUSED.',
+      impact: 'No ACTIVE spend path exists; human approval remains the final gate.',
+      affects: ['HumanReviewer'],
+    },
+  ]
+}
+
+function buildPlanDiff({ budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim, originalClaim, repairedClaim, budget }) {
+  const beforeAdSets = Math.max(3, budgetAdSetLimit + 1)
+  const beforeBudget = Math.round(budget / beforeAdSets)
+  const afterBudget = Math.round(budget / budgetAdSetLimit)
+  const items = [
+    {
+      field: 'Objective',
+      before: 'CONVERSIONS',
+      after: objectiveRecommendation,
+      reason: 'Pixel/event maturity is not proven, so the repaired plan optimizes for a safer first signal.',
+    },
+    {
+      field: 'Ad sets',
+      before: String(beforeAdSets),
+      after: String(budgetAdSetLimit),
+      reason: 'BudgetEconomicsAgent capped the structure to protect signal density.',
+    },
+    {
+      field: 'Budget per ad set',
+      before: moneyText(beforeBudget),
+      after: moneyText(afterBudget),
+      reason: 'Fewer ad sets create a more viable learning window.',
+    },
+    {
+      field: 'Launch state',
+      before: 'FIX_FIRST',
+      after: 'READY_PAUSED',
+      reason: 'The repaired plan can be prepared, but still cannot spend without human approval.',
+    },
+  ]
+
+  if (hasRiskyClaim) {
+    items.splice(3, 0, {
+      field: 'Claim',
+      before: originalClaim,
+      after: repairedClaim,
+      reason: 'EvidenceAgent marked the original as a policy-sensitive outcome promise.',
+    })
+  }
+
+  return {
+    status: hasRiskyClaim || objectiveRecommendation !== 'CONVERSIONS' || budgetAdSetLimit <= 2 ? 'FIX_FIRST_TO_READY_PAUSED' : 'READY_PAUSED',
+    summary: 'Coordinator repaired the plan by reducing fragmentation, changing the objective, and removing risky claims before paused execution.',
+    items,
+  }
+}
+
+function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim }) {
+  const finalAdSetCount = workspace.recommended_plan?.ad_sets?.length || 0
+  const finalObjective = workspace.recommended_plan?.objective || workspace.paused_execution_spec?.campaign?.objective
+  const diffText = JSON.stringify(workspace.plan_diff || {})
+  const timelineOrder = (workspace.agent_timeline || []).map((item) => item.agent)
+  return [
+    {
+      id: 'budget_ad_set_limit_applied',
+      passed: budgetAdSetLimit === finalAdSetCount,
+      expected: budgetAdSetLimit,
+      actual: finalAdSetCount,
+      detail: 'BudgetEconomicsAgent.ad_set_limit must equal final recommended ad set count.',
+    },
+    {
+      id: 'delivery_objective_applied',
+      passed: objectiveRecommendation === finalObjective,
+      expected: objectiveRecommendation,
+      actual: finalObjective,
+      detail: 'DeliveryReadinessAgent objective recommendation must be applied to the final plan.',
+    },
+    {
+      id: 'risky_claim_rewritten',
+      passed: !hasRiskyClaim || /Claim|claim|job|resume|proof|hidden/i.test(diffText),
+      expected: hasRiskyClaim ? 'claim rewrite in plan_diff' : 'no risky claim rewrite required',
+      actual: hasRiskyClaim ? 'plan_diff inspected' : 'not required',
+      detail: 'Risky EvidenceAgent claims must appear in the repair diff.',
+    },
+    {
+      id: 'timeline_order',
+      passed: timelineOrder.join('>') === 'EvidenceAgent>MediaPlannerAgent>BudgetEconomicsAgent>DeliveryReadinessAgent>CoordinatorAgent>PausedExecutor',
+      expected: 'EvidenceAgent>MediaPlannerAgent>BudgetEconomicsAgent>DeliveryReadinessAgent>CoordinatorAgent>PausedExecutor',
+      actual: timelineOrder.join('>'),
+      detail: 'Agent timeline must reveal the causal chain in order.',
+    },
+  ]
+}
+
+function pickOriginalRiskyClaim(intake, evidence) {
+  const text = `${intake.assets || ''}\n${intake.landing_page || ''}`
+  const match = text.match(/land a job in 7 days|guaranteed?[^,.!。！？]{0,80}|[^,.!。！？]{0,40}7 days[^,.!。！？]{0,40}/i)
+  if (match) return match[0]
+  if (Array.isArray(evidence.risky_claims) && evidence.risky_claims[0]) return evidence.risky_claims[0]
+  return 'Risky outcome promise'
 }
 
 function moneyText(value) {

@@ -10,6 +10,7 @@ import {
   runPlanner,
   runFixer,
   runMediaBuyingWorkspace,
+  collectEvidence,
   streamAuditor,
   AUDITORS,
 } from './agents.mjs'
@@ -143,6 +144,15 @@ async function handleApi(req, res) {
     try {
       const workspace = await runMediaBuyingWorkspace(body)
       return json(res, 200, { workspace })
+    } catch (err) {
+      return json(res, 500, { error: err.message })
+    }
+  }
+
+  if (req.url === '/api/evidence/collect') {
+    try {
+      const evidence = await collectEvidence({ ...body, demo_mode: body.demo_mode ?? true })
+      return json(res, 200, evidence)
     } catch (err) {
       return json(res, 500, { error: err.message })
     }
