@@ -137,12 +137,25 @@ export async function callAgent({ system, user, json = false, temperature = 0.3,
  * Streaming chat completion. Invokes onChunk(textDelta) as tokens arrive.
  * Vertex mode falls back to one non-streaming response to keep the same API.
  */
-export async function streamAgent({ system, user, onChunk, temperature = 0.3, maxTokens = 800 }) {
+export async function streamAgent({ system, user, onChunk, json = false, temperature = 0.3, maxTokens = 800 }) {
   if (USE_VERTEX) {
-    const content = await callVertexAgent({ system, user, temperature, maxTokens })
-    onChunk?.(content)
-    return content
+    const content = await callVertexAgent({ system, user, json, temperature, maxTokens })
+    const text = json ? JSON.stringify(content || {}) : content
+    onChunk?.(text)
+    return text
   }
+
+  const body = {
+    model: MODEL,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    temperature,
+    max_tokens: maxTokens,
+    stream: true,
+  }
+  if (json) body.response_format = { type: 'json_object' }
 
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -150,16 +163,7 @@ export async function streamAgent({ system, user, onChunk, temperature = 0.3, ma
       'content-type': 'application/json',
       authorization: `Bearer ${API_KEY}`,
     },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok || !res.body) {

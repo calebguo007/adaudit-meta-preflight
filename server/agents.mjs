@@ -284,17 +284,22 @@ No prose outside the JSON.`
  * Each report = { auditor, ...AUDITOR_OUTPUT_SCHEMA }
  */
 export async function runAuditors(brief) {
+  const startedAt = Date.now()
+  console.log(`[preflight] runAuditors start agents=${AUDITORS.length}`)
   const userMsg = `Brief to audit:\n"""\n${brief}\n"""`
   const results = await Promise.all(
     AUDITORS.map(async (a) => {
       try {
-        const report = await callAgent({ system: a.system, user: userMsg, json: true, maxTokens: 400 })
+        const report = await callAgent({ system: a.system, user: userMsg, json: true, maxTokens: 700 })
+        console.log(`[preflight] ${a.name} done status=${report?.status || 'invalid'}`)
         return { auditor: a.name, id: a.id, ...(report || fallbackReport(a.name)) }
       } catch (err) {
+        console.error(`[preflight] ${a.name} failed error=${err?.message || err}`)
         return { auditor: a.name, id: a.id, ...fallbackReport(a.name, err.message) }
       }
     })
   )
+  console.log(`[preflight] runAuditors complete duration_ms=${Date.now() - startedAt}`)
   return results
 }
 
@@ -303,7 +308,7 @@ export async function runAuditors(brief) {
  */
 export async function runCoordinator(brief, reports) {
   const userMsg = `Brief:\n"""${brief}"""\n\nAuditor reports:\n${JSON.stringify(reports, null, 2)}`
-  const decision = await callAgent({ system: COORDINATOR_SYSTEM, user: userMsg, json: true, maxTokens: 400 })
+  const decision = await callAgent({ system: COORDINATOR_SYSTEM, user: userMsg, json: true, maxTokens: 650 })
   return decision || fallbackDecision(reports)
 }
 
@@ -375,11 +380,14 @@ export async function streamAuditor(auditorId, brief, onChunk) {
   const full = await streamAgent({
     system: a.system,
     user: userMsg,
-    maxTokens: 400,
+    json: true,
+    maxTokens: 700,
     onChunk: (delta) => onChunk({ agent: a.name, delta }),
   })
   try {
-    return { auditor: a.name, id: a.id, ...JSON.parse(full) }
+    const parsed = JSON.parse(full)
+    if (!parsed?.status || !parsed?.headline) return { auditor: a.name, id: a.id, ...fallbackReport(a.name) }
+    return { auditor: a.name, id: a.id, ...parsed }
   } catch {
     const match = full.match(/\{[\s\S]*\}/)
     if (match) {

@@ -81,33 +81,45 @@ async function handleApi(req, res) {
     try { body = await readJson(req) } catch { return json(res, 400, { error: 'Invalid JSON' }) }
     const brief = (body.brief || '').trim()
     if (!brief) return json(res, 400, { error: 'brief is required' })
+    const requestId = body.request_id || `pf_${Date.now().toString(36)}`
+    console.log(`[api:${requestId}] POST /api/preflight/stream provider=${aiInfo().provider}`)
 
     sseHeaders(res)
     res.write(': connected\n\n')
     sseSend(res, 'start', { brief, agents: AUDITORS.map((a) => ({ id: a.id, name: a.name })) })
+    const keepAlive = setInterval(() => {
+      res.write(`: keepalive ${Date.now()}\n\n`)
+    }, 10000)
 
-    const reports = await Promise.all(
-      AUDITORS.map(async (a) => {
-        sseSend(res, 'agent_start', { id: a.id, name: a.name })
-        try {
-          const report = await streamAuditor(a.id, brief, ({ agent, delta }) => {
-            sseSend(res, 'agent_chunk', { id: a.id, name: agent, delta })
-          })
-          sseSend(res, 'agent_done', { id: a.id, report })
-          return report
-        } catch (err) {
-          sseSend(res, 'agent_error', { id: a.id, error: err.message })
-          return null
-        }
-      })
-    )
+    let reports
+    try {
+      reports = await Promise.all(
+        AUDITORS.map(async (a) => {
+          sseSend(res, 'agent_start', { id: a.id, name: a.name })
+          try {
+            const report = await streamAuditor(a.id, brief, ({ agent, delta }) => {
+              sseSend(res, 'agent_chunk', { id: a.id, name: agent, delta })
+            })
+            sseSend(res, 'agent_done', { id: a.id, report })
+            return report
+          } catch (err) {
+            sseSend(res, 'agent_error', { id: a.id, error: err.message })
+            return null
+          }
+        })
+      )
+    } finally {
+      clearInterval(keepAlive)
+    }
 
     const valid = reports.filter(Boolean)
     try {
       const decision = await runCoordinator(brief, valid)
       sseSend(res, 'coordinator_done', { decision, reports: valid })
+      console.log(`[api:${requestId}] POST /api/preflight/stream complete reports=${valid.length} decision=${decision?.decision}`)
     } catch (err) {
       sseSend(res, 'coordinator_error', { error: err.message })
+      console.error(`[api:${requestId}] POST /api/preflight/stream coordinator_error=${err?.message || err}`)
     }
 
     sseSend(res, 'end', { ok: true })
@@ -166,11 +178,15 @@ async function handleApi(req, res) {
   if (req.url === '/api/preflight/run') {
     const brief = (body.brief || '').trim()
     if (!brief) return json(res, 400, { error: 'brief is required' })
+    const requestId = body.request_id || `pf_${Date.now().toString(36)}`
+    console.log(`[api:${requestId}] POST /api/preflight/run provider=${aiInfo().provider}`)
     try {
       const reports = await runAuditors(brief)
       const decision = await runCoordinator(brief, reports)
+      console.log(`[api:${requestId}] POST /api/preflight/run 200 reports=${reports.length} decision=${decision?.decision}`)
       return json(res, 200, { decision, reports })
     } catch (err) {
+      console.error(`[api:${requestId}] POST /api/preflight/run 500 error=${err?.message || err}`)
       return json(res, 500, { error: err.message })
     }
   }
