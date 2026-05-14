@@ -141,10 +141,15 @@ async function handleApi(req, res) {
   }
 
   if (req.url === '/api/workspace/analyze') {
+    const requestId = body.request_id || `req_${Date.now().toString(36)}`
+    body.request_id = requestId
+    console.log(`[api:${requestId}] POST /api/workspace/analyze demo_mode=${Boolean(body.demo_mode)} provider=${aiInfo().provider}`)
     try {
       const workspace = await runMediaBuyingWorkspace(body)
+      console.log(`[api:${requestId}] POST /api/workspace/analyze 200 decision=${workspace.final_decision?.status}`)
       return json(res, 200, { workspace })
     } catch (err) {
+      console.error(`[api:${requestId}] POST /api/workspace/analyze 500 error=${err?.message || err}`)
       return json(res, 500, { error: err.message })
     }
   }

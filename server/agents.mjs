@@ -328,22 +328,35 @@ export async function runFixer(brief, reports) {
  * This is the primary v2 product flow: intake -> evidence -> scenarios -> recommendation -> guardrails.
  */
 export async function runMediaBuyingWorkspace(intake) {
+  const startedAt = Date.now()
   const normalized = normalizeIntake(intake)
+  const requestId = intake?.request_id || `ws_${Date.now().toString(36)}`
+  const mode = intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true' ? 'fixture' : 'live'
+  console.log(`[workspace:${requestId}] start mode=${mode} product="${normalized.product}" budget=${normalized.budget_usd}`)
   const evidenceBundle = await collectEvidence({ ...normalized, demo_mode: intake?.demo_mode })
+  console.log(`[workspace:${requestId}] evidence mode=${evidenceBundle?.mode || 'unknown'} artifacts=${evidenceBundle?.artifacts?.length || 0}`)
   if (intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true') {
-    return fallbackWorkspace(normalized, evidenceBundle)
+    const workspace = fallbackWorkspace(normalized, evidenceBundle)
+    console.log(`[workspace:${requestId}] fixture complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
+    return workspace
   }
   const userMsg = `Campaign intake:\n${JSON.stringify(normalized, null, 2)}`
   try {
+    console.log(`[workspace:${requestId}] ai_call start`)
     const result = await callAgent({
       system: MEDIA_BUYER_WORKSPACE_SYSTEM,
       user: userMsg,
       json: true,
       maxTokens: 2200,
     })
-    return completeWorkspace(normalized, result, evidenceBundle)
-  } catch {
-    return fallbackWorkspace(normalized, evidenceBundle)
+    const workspace = completeWorkspace(normalized, result, evidenceBundle)
+    console.log(`[workspace:${requestId}] ai_call success decision=${workspace.final_decision?.status} checks=${workspace.causal_checks?.filter((check) => check.passed).length || 0}/${workspace.causal_checks?.length || 0} duration_ms=${Date.now() - startedAt}`)
+    return workspace
+  } catch (err) {
+    console.error(`[workspace:${requestId}] ai_call failed fallback=true error=${err?.message || err}`)
+    const workspace = fallbackWorkspace(normalized, evidenceBundle)
+    console.log(`[workspace:${requestId}] fallback complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
+    return workspace
   }
 }
 
