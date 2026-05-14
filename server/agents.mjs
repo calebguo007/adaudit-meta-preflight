@@ -956,15 +956,19 @@ function buildPlanDiff({ budgetAdSetLimit, objectiveRecommendation, hasRiskyClai
 function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim }) {
   const finalAdSetCount = workspace.recommended_plan?.ad_sets?.length || 0
   const finalObjective = workspace.recommended_plan?.objective || workspace.paused_execution_spec?.campaign?.objective
+  const deliveryStatus = workspace.delivery_readiness?.status || 'unknown'
+  const targetCpa = parseMoneyValue(workspace.unit_economics?.target_cpa || workspace.budget_economics?.target_cpa)
+  const breakEvenCpa = parseMoneyValue(workspace.unit_economics?.break_even_cpa || workspace.budget_economics?.break_even_cpa)
+  const economicsKnown = Number.isFinite(targetCpa) && Number.isFinite(breakEvenCpa) && breakEvenCpa > 0
   const diffText = JSON.stringify(workspace.plan_diff || {})
   const timelineOrder = (workspace.agent_timeline || []).map((item) => item.agent)
   return [
     {
       id: 'budget_ad_set_limit_applied',
-      passed: budgetAdSetLimit === finalAdSetCount,
-      expected: budgetAdSetLimit,
+      passed: finalAdSetCount <= budgetAdSetLimit,
+      expected: `<= ${budgetAdSetLimit}`,
       actual: finalAdSetCount,
-      detail: 'BudgetEconomicsAgent.ad_set_limit must equal final recommended ad set count.',
+      detail: 'Recommended plan ad set count must not exceed BudgetEconomicsAgent limit.',
     },
     {
       id: 'delivery_objective_applied',
@@ -972,6 +976,20 @@ function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendatio
       expected: objectiveRecommendation,
       actual: finalObjective,
       detail: 'DeliveryReadinessAgent objective recommendation must be applied to the final plan.',
+    },
+    {
+      id: 'objective_pixel_safety',
+      passed: !(finalObjective === 'CONVERSIONS' && deliveryStatus !== 'ready'),
+      expected: 'No CONVERSIONS objective unless delivery readiness is ready',
+      actual: `${finalObjective} + ${deliveryStatus}`,
+      detail: 'Conversion objective requires verified tracking readiness.',
+    },
+    {
+      id: 'economics_safety',
+      passed: !economicsKnown || targetCpa <= breakEvenCpa,
+      expected: economicsKnown ? `target CPA <= break-even CPA (${moneyText(breakEvenCpa)})` : 'economics unknown; do not claim scale readiness',
+      actual: economicsKnown ? `${moneyText(targetCpa)} vs ${moneyText(breakEvenCpa)}` : 'unknown',
+      detail: 'Unit economics must be viable before scale is recommended.',
     },
     {
       id: 'risky_claim_rewritten',
@@ -996,6 +1014,14 @@ function pickOriginalRiskyClaim(intake, evidence) {
   if (match) return match[0]
   if (Array.isArray(evidence.risky_claims) && evidence.risky_claims[0]) return evidence.risky_claims[0]
   return 'Risky outcome promise'
+}
+
+function parseMoneyValue(value) {
+  if (typeof value === 'number') return value
+  if (typeof value !== 'string') return NaN
+  const normalized = value.replace(/[^0-9.-]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : NaN
 }
 
 function moneyText(value) {

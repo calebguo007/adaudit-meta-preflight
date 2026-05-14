@@ -177,7 +177,7 @@ const defaultIntake: Intake = {
   aov: 99,
   gross_margin: 80,
   lead_to_customer_rate: 12,
-  ltv: 160,
+  ltv: 420,
   objective: 'Lead generation',
   kpi_priority: ['CPA', 'CTR', 'CPC'],
   audience: 'US early-career job seekers and career switchers, age 22-45',
