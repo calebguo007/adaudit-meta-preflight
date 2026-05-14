@@ -149,13 +149,33 @@ const MEDIA_BUYER_WORKSPACE_SYSTEM = `You are AdAudit, a guarded AI media buyer 
 
 Your job is not to generate one ad and not to simply reject a brief. Your job is to simulate multiple media-buying options, pick the cheapest viable test, explain why the weaker options waste budget, run safety/audit reasoning, and prepare only paused execution.
 
+Think like a Claude Code / Codex-style agent system:
+- The Planner proposes multiple viable paths instead of one answer.
+- Specialist agents inspect separate failure modes.
+- The Coordinator picks one plan and records why alternatives lose.
+- The Executor is constrained: it can prepare PAUSED objects only.
+
+Use these specialist perspectives:
+- MarketResearchAgent: competitor hooks, category norms, landing-page gaps, white space.
+- DeliveryReadinessAgent: pixel, objective, inventory, special category, policy readiness.
+- BudgetSignalAgent: signal density, learning-phase risk, ad set count, sample size.
+- AudienceStrategyAgent: broad vs interest-led vs retargeting, overlap, platform automation tradeoff.
+- CreativeStrategyAgent: hypotheses as testable bets, not final assets.
+- UnitEconomicsAgent: CPA/ROAS/lead-quality feasibility from AOV, margin, LTV, target CPA if provided.
+- MediaBuyerCoordinator: choose HOLD/FIX_FIRST/READY_PAUSED and define kill/hold/scale rules.
+
 Use these paid-social rules:
 - If pixel or recent conversion volume is unknown, avoid conversion-first plans.
 - Under $1000, keep ad set count low; signal density matters more than testing granularity.
 - Meta learning phase needs roughly 50 optimization events per ad set per week.
+- A small budget should test the highest-leverage uncertainty first, not every audience and creative.
+- A campaign structure is a signal to the platform. Do not split by placement, creative, or tiny audiences without measurement reason.
+- CTR is not enough. If downstream value is unknown, prefer a plan that can inspect lead quality before scale.
 - Special ad categories include employment, credit, housing, social/political issues, and some financial services.
 - Outcome guarantees and unprovable claims are high risk.
 - Frequency >3.0 with rising CPM suggests creative/audience fatigue, not a budget problem.
+- Kill rule: if spend reaches 2.5-3x target CPA with no qualified signal, stop that ad set.
+- Scale rule: raise budgets gradually (~20%) only after efficiency and downstream quality are both acceptable.
 - Write operations touch money. Output only PAUSED execution specs.
 
 Respond with valid JSON matching this exact schema:
@@ -175,6 +195,39 @@ Respond with valid JSON matching this exact schema:
   "creative_hypotheses": [
     { "name": "<short name>", "hook": "<testable hook>", "emotion": "<emotion>", "proof": "<proof mechanism>", "risk": "<low|medium|high>", "success_metric": "<metric>" }
   ],
+  "strategy_agents": [
+    { "agent": "MarketResearchAgent" | "DeliveryReadinessAgent" | "BudgetSignalAgent" | "AudienceStrategyAgent" | "CreativeStrategyAgent" | "UnitEconomicsAgent", "status": "pass" | "watch" | "block", "finding": "<specific finding>", "decision_impact": "<how it changes the media plan>" }
+  ],
+  "market_research": {
+    "category_patterns": ["<competitor or category pattern>"],
+    "white_space": ["<angle or audience gap>"],
+    "landing_page_gaps": ["<gap that affects conversion or quality>"]
+  },
+  "delivery_readiness": {
+    "status": "ready" | "watch" | "blocked",
+    "checks": [
+      { "name": "<check name>", "status": "pass" | "warn" | "fail", "reason": "<specific reason>" }
+    ]
+  },
+  "budget_signal": {
+    "status": "sufficient" | "thin" | "underpowered",
+    "signal_density": "<how much signal the budget can realistically buy>",
+    "learning_risk": "<specific learning phase risk>",
+    "recommended_ad_set_count": <number>
+  },
+  "audience_strategy": {
+    "mode": "broad" | "interest-led" | "retargeting" | "lookalike" | "hybrid",
+    "rationale": "<why this targeting mode is best>",
+    "control_tradeoff": "<what the agent gives up or controls>"
+  },
+  "unit_economics": {
+    "status": "known" | "estimated" | "missing",
+    "target_cpa": "<value or unknown>",
+    "break_even_cpa": "<value or unknown>",
+    "break_even_roas": "<value or unknown>",
+    "confidence": "low" | "medium" | "high",
+    "assumptions": ["<assumption>"]
+  },
   "scenarios": [
     {
       "id": "validation" | "balanced" | "aggressive",
@@ -206,6 +259,14 @@ Respond with valid JSON matching this exact schema:
     "summary": "<executive summary>",
     "human_approval_required": true
   },
+  "kill_scale_rules": {
+    "kill": ["<condition under which the buyer stops spend>"],
+    "hold": ["<condition under which the buyer waits or collects more data>"],
+    "scale": ["<condition under which the buyer increases budget>"]
+  },
+  "monitoring_plan_72h": [
+    { "window": "0-24h" | "24-48h" | "48-72h", "checks": ["<metric or decision check>"] }
+  ],
   "paused_execution_spec": {
     "status": "PAUSED",
     "executor_mode": "mock",
@@ -337,12 +398,24 @@ function fallbackDecision(reports) {
 
 function normalizeIntake(intake = {}) {
   const budget = Number(intake.budget_usd || intake.budget || 500)
+  const targetCpa = Number(intake.target_cpa || intake.target_cpa_usd || 0)
+  const aov = Number(intake.aov || intake.average_order_value || 0)
+  const ltv = Number(intake.ltv || intake.customer_ltv || 0)
+  const rawLeadToCustomerRate = Number(intake.lead_to_customer_rate || intake.close_rate || 0)
+  const rawMargin = Number(intake.gross_margin || intake.margin || 0)
+  const grossMargin = rawMargin > 1 ? rawMargin / 100 : rawMargin
+  const leadToCustomerRate = rawLeadToCustomerRate > 1 ? rawLeadToCustomerRate / 100 : rawLeadToCustomerRate
   return {
     product: String(intake.product || 'AI resume optimizer'),
     product_url: String(intake.product_url || ''),
     landing_page: String(intake.landing_page || intake.landing_page_notes || ''),
     platform: 'Meta',
     budget_usd: Number.isFinite(budget) ? budget : 500,
+    target_cpa: Number.isFinite(targetCpa) && targetCpa > 0 ? targetCpa : null,
+    aov: Number.isFinite(aov) && aov > 0 ? aov : null,
+    ltv: Number.isFinite(ltv) && ltv > 0 ? ltv : null,
+    gross_margin: Number.isFinite(grossMargin) && grossMargin > 0 ? grossMargin : null,
+    lead_to_customer_rate: Number.isFinite(leadToCustomerRate) && leadToCustomerRate > 0 ? leadToCustomerRate : null,
     objective: String(intake.objective || 'leads'),
     kpi_priority: Array.isArray(intake.kpi_priority) ? intake.kpi_priority : ['CPA', 'CTR', 'CPC'],
     audience: String(intake.audience || 'US early-career job seekers'),
@@ -358,6 +431,17 @@ function fallbackWorkspace(intake) {
   const isSmallBudget = budget < 1000
   const objective = intake.pixel_status === 'verified' && budget >= 1500 ? 'CONVERSIONS' : 'LEADS'
   const campaignName = `PROS - ${intake.product.slice(0, 28)} - US - ${objective} - v0526`
+  const adSetCount = isSmallBudget ? 2 : 3
+  const targetCpa = intake.target_cpa || 35
+  const breakEvenFromMargin = intake.aov && intake.gross_margin ? intake.aov * intake.gross_margin : null
+  const breakEvenFromLtv = intake.ltv && intake.lead_to_customer_rate ? intake.ltv * intake.lead_to_customer_rate : null
+  const breakEvenCpa = breakEvenFromLtv || breakEvenFromMargin
+  const economicsSafe = breakEvenCpa ? targetCpa <= breakEvenCpa : false
+  const breakEvenRoas = intake.gross_margin ? 1 / intake.gross_margin : null
+  const signalClicksLow = Math.max(60, Math.round(budget / 3.5))
+  const signalClicksHigh = Math.max(signalClicksLow + 30, Math.round(budget / 1.5))
+  const killSpend = Math.round(targetCpa * 2.75)
+  const perAdSetBudget = Math.round(budget / adSetCount)
 
   return {
     intake_summary: {
@@ -416,6 +500,107 @@ function fallbackWorkspace(intake) {
         success_metric: 'not recommended',
       },
     ],
+    strategy_agents: [
+      {
+        agent: 'MarketResearchAgent',
+        status: 'pass',
+        finding: 'Resume and career-tool competitors usually lean on ATS visibility, before/after clarity, and speed-to-apply hooks.',
+        decision_impact: 'Prioritize proof-first hypotheses and avoid generic "AI will get you hired" messaging.',
+      },
+      {
+        agent: 'DeliveryReadinessAgent',
+        status: intake.pixel_status === 'verified' ? 'pass' : 'watch',
+        finding: intake.pixel_status === 'verified' ? 'Tracking is marked verified.' : 'Conversion tracking maturity is unknown.',
+        decision_impact: intake.pixel_status === 'verified' ? 'Conversions can be considered if budget supports learning.' : 'Use Lead or Traffic objective before asking Meta to optimize for scarce conversion events.',
+      },
+      {
+        agent: 'BudgetSignalAgent',
+        status: isSmallBudget ? 'watch' : 'pass',
+        finding: `${moneyText(budget)} split across ${adSetCount} ad sets leaves about ${moneyText(perAdSetBudget)} per ad set.`,
+        decision_impact: 'Cap structure before creative variety; signal density is more valuable than testing every segment.',
+      },
+      {
+        agent: 'AudienceStrategyAgent',
+        status: 'pass',
+        finding: 'The product has broad intent but a narrow purchase trigger, so fully fragmented interest stacks would hide what works.',
+        decision_impact: 'Use two interpretable segments and let platform automation optimize within each segment.',
+      },
+      {
+        agent: 'CreativeStrategyAgent',
+        status: 'watch',
+        finding: 'The supplied asset set includes one risky employment-outcome promise.',
+        decision_impact: 'Keep the visual direction, but rewrite claims around resume quality evidence instead of job guarantees.',
+      },
+      {
+        agent: 'UnitEconomicsAgent',
+        status: breakEvenCpa && economicsSafe ? 'pass' : 'watch',
+        finding: breakEvenCpa ? `Break-even CPA is approximately ${moneyText(breakEvenCpa)} from supplied economics.` : 'AOV, margin, LTV, or close-rate data is incomplete.',
+        decision_impact: breakEvenCpa
+          ? economicsSafe
+            ? 'Use break-even CPA as the first kill/scale threshold.'
+            : 'Target CPA is above estimated break-even; validate lead quality before any scale decision.'
+          : 'Treat CPL as a proxy until lead quality or revenue data is connected.',
+      },
+    ],
+    market_research: {
+      category_patterns: [
+        'Resume tools compete on ATS visibility, recruiter credibility, and before/after clarity.',
+        'High-risk category ads overpromise employment outcomes; durable ads show a mechanism or proof artifact.',
+        'Static proof cards and short UGC demos are easier to judge than generic AI screenshots.',
+      ],
+      white_space: [
+        'Position the product as a diagnostic audit before rewriting, not just another resume generator.',
+        'Target career switchers with "hidden filter" education rather than generic job-seeker anxiety.',
+      ],
+      landing_page_gaps: [
+        intake.landing_page ? 'Landing-page notes exist; verify that the first screen repeats the same proof mechanism as the ad.' : 'Landing-page evidence is missing, so lead quality risk remains unresolved.',
+        'Add an explicit proof artifact such as ATS checklist, sample score, or recruiter rubric before scaling.',
+      ],
+    },
+    delivery_readiness: {
+      status: intake.pixel_status === 'verified' ? 'ready' : 'watch',
+      checks: [
+        {
+          name: 'Optimization event',
+          status: intake.pixel_status === 'verified' ? 'pass' : 'warn',
+          reason: intake.pixel_status === 'verified' ? 'Pixel is marked verified.' : 'Recent conversion event volume is not proven.',
+        },
+        {
+          name: 'Special category / policy',
+          status: 'warn',
+          reason: 'Employment-adjacent claims require conservative language and no guaranteed outcome promise.',
+        },
+        {
+          name: 'Launch state',
+          status: 'pass',
+          reason: 'Executor is constrained to PAUSED objects only.',
+        },
+      ],
+    },
+    budget_signal: {
+      status: isSmallBudget ? 'thin' : 'sufficient',
+      signal_density: `${moneyText(budget)} can likely buy ~${signalClicksLow}-${signalClicksHigh} clicks or a smaller number of qualified leads; it cannot support many split tests.`,
+      learning_risk: objective === 'CONVERSIONS' ? 'Conversion objective requires recent event volume; otherwise learning phase will stall.' : 'Lead objective gives faster signal but still needs lead-quality review before scale.',
+      recommended_ad_set_count: adSetCount,
+    },
+    audience_strategy: {
+      mode: 'hybrid',
+      rationale: 'Use one job-search intent segment and one career-switcher/problem-aware segment, keeping both large enough for delivery.',
+      control_tradeoff: 'The buyer controls hypothesis and budget split, but avoids over-constraining placements or micro-interests so Meta can find cheaper pockets.',
+    },
+    unit_economics: {
+      status: breakEvenCpa ? 'known' : 'missing',
+      target_cpa: intake.target_cpa ? moneyText(intake.target_cpa) : `${moneyText(targetCpa)} assumed for first-flight guardrails`,
+      break_even_cpa: breakEvenCpa ? moneyText(breakEvenCpa) : 'unknown',
+      break_even_roas: breakEvenRoas ? `${breakEvenRoas.toFixed(2)}x` : 'unknown',
+      confidence: breakEvenCpa && economicsSafe ? 'medium' : 'low',
+      assumptions: [
+        intake.target_cpa ? 'Target CPA was supplied by the user.' : 'Default target CPA is a temporary testing threshold, not a profitability claim.',
+        breakEvenFromLtv ? 'Break-even CPA is based on LTV multiplied by lead-to-customer rate.' : breakEvenFromMargin ? 'Break-even CPA is based on AOV multiplied by gross margin.' : 'Revenue economics were not supplied.',
+        breakEvenCpa && !economicsSafe ? 'Estimated break-even CPA is below target CPA, so the agent should learn cheaply before scale.' : '',
+        'Do not scale on CTR alone; inspect downstream lead quality first.',
+      ].filter(Boolean),
+    },
     scenarios: [
       {
         id: 'validation',
@@ -522,6 +707,37 @@ function fallbackWorkspace(intake) {
         : 'The balanced plan is ready to prepare as paused Meta campaign objects with human approval.',
       human_approval_required: true,
     },
+    kill_scale_rules: {
+      kill: [
+        `Kill an ad set if spend exceeds ${moneyText(killSpend)} (~2.75x target CPA) with zero qualified lead signal.`,
+        'Kill or rewrite any creative that raises CTR but produces weak landing-page continuation or low-quality leads.',
+        'Pause policy-risk claims immediately if review feedback or rejection appears.',
+      ],
+      hold: [
+        'Hold budget changes during the first 24 hours unless delivery is broken.',
+        'Hold scaling when CPM rises and frequency exceeds 3.0 before declaring audience failure.',
+        'Hold conversion-objective migration until pixel event volume is verified.',
+      ],
+      scale: [
+        'Scale by roughly 20% only after CPL is at or below target and lead quality is acceptable.',
+        'Move budget toward the winning hypothesis after it has both cheaper signal and better continuation quality.',
+        'Promote to conversion optimization only when enough recent events exist for stable learning.',
+      ],
+    },
+    monitoring_plan_72h: [
+      {
+        window: '0-24h',
+        checks: ['Approval status and policy feedback', 'Delivery by ad set', 'CPM/CPC sanity vs expected range', 'Pixel or lead-form event firing'],
+      },
+      {
+        window: '24-48h',
+        checks: ['CTR and landing-page view rate by hypothesis', 'Lead form opens vs submissions', 'Early CPL vs target CPA', 'Audience overlap or budget fragmentation symptoms'],
+      },
+      {
+        window: '48-72h',
+        checks: ['Qualified lead quality', 'Spend vs 2.5-3x CPA kill threshold', 'Frequency and CPM fatigue signals', '20% scale or pause decision'],
+      },
+    ],
     paused_execution_spec: {
       status: 'PAUSED',
       executor_mode: 'mock',
@@ -537,4 +753,10 @@ function fallbackWorkspace(intake) {
       ],
     },
   }
+}
+
+function moneyText(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '$0'
+  return `$${Math.round(n).toLocaleString()}`
 }

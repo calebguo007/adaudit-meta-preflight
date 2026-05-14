@@ -683,6 +683,10 @@ article dd.text-ink {
   gap: 0.8rem;
 }
 
+.field-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .field {
   display: grid;
   gap: 0.42rem;
@@ -981,6 +985,133 @@ article dd.text-ink {
   line-height: 1.55;
 }
 
+.strategy-console {
+  display: grid;
+  gap: 1rem;
+}
+
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.strategy-card,
+.diagnostic-card,
+.rule-column,
+.monitoring-list article {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.strategy-card {
+  padding: 0.88rem;
+}
+
+.strategy-card > div,
+.diagnostic-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.62rem;
+}
+
+.strategy-card span,
+.strategy-card em,
+.diagnostic-card span {
+  color: #7dd3fc;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 900;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.strategy-card strong,
+.diagnostic-card strong,
+.rule-column strong,
+.monitoring-list strong {
+  display: block;
+  color: #f8fafc;
+  overflow-wrap: anywhere;
+}
+
+.strategy-card p {
+  margin: 0.45rem 0 0;
+  color: #a9bad0;
+  line-height: 1.5;
+}
+
+.strategy-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.diagnostic-card {
+  padding: 0.82rem;
+}
+
+.diagnostic-card ul,
+.rule-column ul,
+.monitoring-list ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnostic-card li,
+.rule-column li,
+.monitoring-list li {
+  color: #a9bad0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.diagnostic-card li::before,
+.rule-column li::before,
+.monitoring-list li::before {
+  content: "•";
+  margin-right: 0.42rem;
+  color: #67e8f9;
+}
+
+.rule-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rule-column {
+  padding: 0.88rem;
+}
+
+.rule-column.bad {
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.rule-column.warn {
+  background: rgba(120, 53, 15, 0.16);
+}
+
+.rule-column.good {
+  background: rgba(6, 78, 59, 0.16);
+}
+
+.monitoring-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.monitoring-list article {
+  padding: 0.88rem;
+}
+
 .stack {
   display: grid;
   gap: 0.8rem;
@@ -1082,7 +1213,9 @@ article dd.text-ink {
   }
 
   .auditor-grid,
-  .result-grid.three {
+  .result-grid.three,
+  .strategy-grid,
+  .strategy-diagnostics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1110,9 +1243,12 @@ article dd.text-ink {
 
 @media (max-width: 720px) {
   .field-row,
+  .field-row.three,
   .action-row,
   .result-grid.two,
   .result-grid.three,
+  .strategy-grid,
+  .strategy-diagnostics,
   .auditor-grid,
   .scenario-card dl,
   .recommendation-grid,

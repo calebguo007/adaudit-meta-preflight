@@ -8,6 +8,11 @@ type Intake = {
   landing_page: string
   platform: string
   budget_usd: number
+  target_cpa: number
+  aov: number
+  gross_margin: number
+  lead_to_customer_rate: number
+  ltv: number
   objective: string
   kpi_priority: string[]
   audience: string
@@ -19,6 +24,49 @@ type Intake = {
 
 type Evidence = { source: string; finding: string; impact: string }
 type Hypothesis = { name: string; hook: string; emotion: string; proof: string; risk: string; success_metric: string }
+type StrategyAgent = {
+  agent: string
+  status: 'pass' | 'watch' | 'block'
+  finding: string
+  decision_impact: string
+}
+type MarketResearch = {
+  category_patterns: string[]
+  white_space: string[]
+  landing_page_gaps: string[]
+}
+type DeliveryReadiness = {
+  status: string
+  checks: { name: string; status: 'pass' | 'warn' | 'fail'; reason: string }[]
+}
+type BudgetSignal = {
+  status: string
+  signal_density: string
+  learning_risk: string
+  recommended_ad_set_count: number
+}
+type AudienceStrategy = {
+  mode: string
+  rationale: string
+  control_tradeoff: string
+}
+type UnitEconomics = {
+  status: string
+  target_cpa: string
+  break_even_cpa: string
+  break_even_roas: string
+  confidence: string
+  assumptions: string[]
+}
+type KillScaleRules = {
+  kill: string[]
+  hold: string[]
+  scale: string[]
+}
+type MonitoringWindow = {
+  window: string
+  checks: string[]
+}
 type Scenario = {
   id: string
   name: string
@@ -45,6 +93,12 @@ type Workspace = {
   }
   evidence: Evidence[]
   creative_hypotheses: Hypothesis[]
+  strategy_agents?: StrategyAgent[]
+  market_research?: MarketResearch
+  delivery_readiness?: DeliveryReadiness
+  budget_signal?: BudgetSignal
+  audience_strategy?: AudienceStrategy
+  unit_economics?: UnitEconomics
   scenarios: Scenario[]
   recommended_plan: {
     scenario_id: string
@@ -55,6 +109,8 @@ type Workspace = {
   }
   auditor_reviews: AuditorReview[]
   final_decision: { status: 'HOLD' | 'FIX_FIRST' | 'READY_PAUSED'; summary: string; human_approval_required: boolean }
+  kill_scale_rules?: KillScaleRules
+  monitoring_plan_72h?: MonitoringWindow[]
   paused_execution_spec: {
     status: string
     executor_mode: string
@@ -71,6 +127,11 @@ const defaultIntake: Intake = {
   landing_page: 'Hero promises resume clarity and ATS readiness. CTA is "Get my resume audit". No job guarantee on the page.',
   platform: 'Meta',
   budget_usd: 500,
+  target_cpa: 35,
+  aov: 99,
+  gross_margin: 80,
+  lead_to_customer_rate: 12,
+  ltv: 160,
   objective: 'Lead generation',
   kpi_priority: ['CPA', 'CTR', 'CPC'],
   audience: 'US early-career job seekers and career switchers, age 22-45',
@@ -89,9 +150,9 @@ function providerName(baseUrl?: string) {
 }
 
 function statusClass(status?: string) {
-  if (status === 'pass' || status === 'READY_PAUSED' || status === 'recommended' || status === 'low') return 'good'
-  if (status === 'warn' || status === 'FIX_FIRST' || status === 'viable' || status === 'medium') return 'warn'
-  if (status === 'fail' || status === 'HOLD' || status === 'not_recommended' || status === 'high') return 'bad'
+  if (status === 'pass' || status === 'ready' || status === 'sufficient' || status === 'READY_PAUSED' || status === 'recommended' || status === 'low') return 'good'
+  if (status === 'warn' || status === 'watch' || status === 'thin' || status === 'estimated' || status === 'FIX_FIRST' || status === 'viable' || status === 'medium') return 'warn'
+  if (status === 'fail' || status === 'block' || status === 'blocked' || status === 'underpowered' || status === 'HOLD' || status === 'not_recommended' || status === 'high') return 'bad'
   return 'neutral'
 }
 
@@ -254,6 +315,52 @@ function App() {
                 />
               </Field>
             </div>
+            <div className="field-row three">
+              <Field label="Target CPA">
+                <input
+                  type="number"
+                  min={0}
+                  value={intake.target_cpa}
+                  onChange={(e) => patch('target_cpa', Number(e.target.value))}
+                />
+              </Field>
+              <Field label="AOV">
+                <input
+                  type="number"
+                  min={0}
+                  value={intake.aov}
+                  onChange={(e) => patch('aov', Number(e.target.value))}
+                />
+              </Field>
+              <Field label="Margin %">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={intake.gross_margin}
+                  onChange={(e) => patch('gross_margin', Number(e.target.value))}
+                />
+              </Field>
+            </div>
+            <div className="field-row">
+              <Field label="Close rate %">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={intake.lead_to_customer_rate}
+                  onChange={(e) => patch('lead_to_customer_rate', Number(e.target.value))}
+                />
+              </Field>
+              <Field label="LTV">
+                <input
+                  type="number"
+                  min={0}
+                  value={intake.ltv}
+                  onChange={(e) => patch('ltv', Number(e.target.value))}
+                />
+              </Field>
+            </div>
             <div className="field-row">
               <Field label="Objective">
                 <select value={intake.objective} onChange={(e) => patch('objective', e.target.value)}>
@@ -322,6 +429,67 @@ function App() {
               ))}
             </div>
 
+            <section className="panel strategy-console">
+              <PanelTitle label="Media Strategy Console" detail="Research, delivery, economics, and budget signal" />
+              <div className="strategy-grid">
+                {(workspace?.strategy_agents || placeholderStrategyAgents).map((agent) => (
+                  <article className={`strategy-card ${statusClass(agent.status)}`} key={agent.agent}>
+                    <div>
+                      <span>{agent.agent}</span>
+                      <em>{formatStatus(agent.status)}</em>
+                    </div>
+                    <strong>{agent.finding}</strong>
+                    <p>{agent.decision_impact}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="strategy-diagnostics">
+                <DiagnosticCard
+                  title="Market Research"
+                  status="category"
+                  lines={[
+                    ...(workspace?.market_research?.category_patterns || ['Competitor and category evidence appears after analysis.']),
+                    ...(workspace?.market_research?.white_space || []),
+                    ...(workspace?.market_research?.landing_page_gaps || []),
+                  ].slice(0, 5)}
+                />
+                <DiagnosticCard
+                  title="Delivery Readiness"
+                  status={workspace?.delivery_readiness?.status || 'pending'}
+                  lines={(workspace?.delivery_readiness?.checks || []).map((check) => `${check.name}: ${check.reason}`)}
+                />
+                <DiagnosticCard
+                  title="Budget Signal"
+                  status={workspace?.budget_signal?.status || 'pending'}
+                  lines={[
+                    workspace?.budget_signal?.signal_density || 'Budget signal math appears after analysis.',
+                    workspace?.budget_signal?.learning_risk || '',
+                    workspace?.budget_signal?.recommended_ad_set_count
+                      ? `Recommended ad sets: ${workspace.budget_signal.recommended_ad_set_count}`
+                      : '',
+                  ].filter(Boolean)}
+                />
+                <DiagnosticCard
+                  title="Audience Strategy"
+                  status={workspace?.audience_strategy?.mode || 'pending'}
+                  lines={[
+                    workspace?.audience_strategy?.rationale || 'Audience strategy appears after analysis.',
+                    workspace?.audience_strategy?.control_tradeoff || '',
+                  ].filter(Boolean)}
+                />
+                <DiagnosticCard
+                  title="Unit Economics"
+                  status={workspace?.unit_economics?.confidence || workspace?.unit_economics?.status || 'pending'}
+                  lines={[
+                    `Target CPA: ${workspace?.unit_economics?.target_cpa || '-'}`,
+                    `Break-even CPA: ${workspace?.unit_economics?.break_even_cpa || '-'}`,
+                    `Break-even ROAS: ${workspace?.unit_economics?.break_even_roas || '-'}`,
+                    ...(workspace?.unit_economics?.assumptions || []),
+                  ]}
+                />
+              </div>
+            </section>
+
             <div className="result-grid two">
               <section className="panel">
                 <PanelTitle label="Evidence Board" detail="What the agents used" />
@@ -376,6 +544,29 @@ function App() {
                 </div>
               </div>
             </section>
+
+            <div className="result-grid two">
+              <section className="panel rule-panel">
+                <PanelTitle label="Kill / Hold / Scale Rules" detail="What the buyer will do after launch" />
+                <RuleColumn label="Kill" tone="bad" rules={workspace?.kill_scale_rules?.kill || ['Run analysis to generate spend-stop rules.']} />
+                <RuleColumn label="Hold" tone="warn" rules={workspace?.kill_scale_rules?.hold || ['Run analysis to generate waiting rules.']} />
+                <RuleColumn label="Scale" tone="good" rules={workspace?.kill_scale_rules?.scale || ['Run analysis to generate scale rules.']} />
+              </section>
+
+              <section className="panel monitoring-panel">
+                <PanelTitle label="72h Monitoring Plan" detail="Post-launch buyer loop" />
+                <div className="monitoring-list">
+                  {(workspace?.monitoring_plan_72h || placeholderMonitoring).map((window) => (
+                    <article key={window.window}>
+                      <strong>{window.window}</strong>
+                      <ul>
+                        {window.checks.map((check) => <li key={check}>{check}</li>)}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </div>
 
             <div className="result-grid two">
               <section className="panel">
@@ -467,6 +658,31 @@ function ScenarioCard({ scenario, active }: { scenario: Scenario; active?: boole
   )
 }
 
+function DiagnosticCard({ title, status, lines }: { title: string; status: string; lines: string[] }) {
+  return (
+    <article className={`diagnostic-card ${statusClass(status)}`}>
+      <div>
+        <strong>{title}</strong>
+        <span>{formatStatus(status)}</span>
+      </div>
+      <ul>
+        {lines.filter(Boolean).slice(0, 5).map((line) => <li key={line}>{line}</li>)}
+      </ul>
+    </article>
+  )
+}
+
+function RuleColumn({ label, tone, rules }: { label: string; tone: string; rules: string[] }) {
+  return (
+    <div className={`rule-column ${tone}`}>
+      <strong>{label}</strong>
+      <ul>
+        {rules.map((rule) => <li key={rule}>{rule}</li>)}
+      </ul>
+    </div>
+  )
+}
+
 const placeholderScenarios: Scenario[] = [
   {
     id: 'validation',
@@ -514,12 +730,24 @@ const placeholderHypotheses: Hypothesis[] = [
   { name: 'Awaiting research', hook: 'Creative hypotheses appear after analysis.', emotion: '-', proof: '-', risk: 'neutral', success_metric: '-' },
 ]
 
+const placeholderStrategyAgents: StrategyAgent[] = [
+  { agent: 'MarketResearchAgent', status: 'watch', finding: 'Awaiting product and competitor context.', decision_impact: 'The agent will map category patterns and whitespace.' },
+  { agent: 'BudgetSignalAgent', status: 'watch', finding: 'Awaiting budget and CPA target.', decision_impact: 'The agent will decide how many ad sets the budget can support.' },
+  { agent: 'UnitEconomicsAgent', status: 'watch', finding: 'Awaiting AOV, margin, LTV, or close-rate assumptions.', decision_impact: 'The agent will set kill and scale thresholds.' },
+]
+
 const placeholderAuditors: AuditorReview[] = [
   { auditor: 'TrackingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
   { auditor: 'AudienceAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
   { auditor: 'BudgetAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
   { auditor: 'PolicyAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
   { auditor: 'CreativeLandingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
+]
+
+const placeholderMonitoring: MonitoringWindow[] = [
+  { window: '0-24h', checks: ['Run analysis to generate the first-day monitoring loop.'] },
+  { window: '24-48h', checks: ['Run analysis to generate the second-day signal checks.'] },
+  { window: '48-72h', checks: ['Run analysis to generate kill/scale decisions.'] },
 ]
 
 export default App
