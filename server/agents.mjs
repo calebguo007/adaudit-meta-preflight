@@ -277,6 +277,37 @@ Respond with valid JSON matching this exact schema:
 }
 No prose outside the JSON.`
 
+const WORKSPACE_OVERLAY_SYSTEM = `You are AdAudit's Gemini strategy overlay.
+Return a compact JSON overlay that enriches a deterministic media-buying workspace. Do not output a full workspace.
+
+Use the campaign intake and structured evidence to produce specific paid-social reasoning. Keep every field concise.
+
+Return valid JSON only:
+{
+  "evidence": [
+    { "source": "<landing page | competitor | asset | benchmark>", "finding": "<specific finding>", "impact": "<why this changes the plan>" }
+  ],
+  "creative_hypotheses": [
+    { "name": "<short>", "hook": "<testable hook>", "emotion": "<emotion>", "proof": "<proof mechanism>", "risk": "low" | "medium" | "high", "success_metric": "<metric>" }
+  ],
+  "strategy_agents": [
+    { "agent": "MarketResearchAgent" | "DeliveryReadinessAgent" | "BudgetSignalAgent" | "AudienceStrategyAgent" | "CreativeStrategyAgent" | "UnitEconomicsAgent", "status": "pass" | "watch" | "block", "finding": "<specific finding>", "decision_impact": "<how it changes the plan>" }
+  ],
+  "market_research": {
+    "category_patterns": ["<pattern>"],
+    "white_space": ["<gap>"],
+    "landing_page_gaps": ["<gap>"]
+  },
+  "final_summary": "<one executive sentence>"
+}
+
+Limits:
+- evidence: 3 items max
+- creative_hypotheses: 3 items exactly
+- strategy_agents: 6 items exactly
+- arrays inside market_research: 3 items max each
+- no markdown fences, no prose outside JSON.`
+
 // ===== orchestrators =====
 
 /**
@@ -352,24 +383,35 @@ export async function runMediaBuyingWorkspace(intake) {
   }
   const userMsg = `Campaign intake:\n${JSON.stringify(normalized, null, 2)}`
   try {
-    console.log(`[workspace:${requestId}] ai_call start`)
-    const result = await callAgent({
-      system: MEDIA_BUYER_WORKSPACE_SYSTEM,
-      user: userMsg,
-      json: true,
-      maxTokens: 6000,
+    console.log(`[workspace:${requestId}] ai_overlay start`)
+    const baseWorkspace = fallbackWorkspace(normalized, evidenceBundle, {
+      requestId,
+      startedAt,
+      source: 'deterministic-base',
+      mode,
     })
-    assertWorkspaceShape(result)
+    const overlay = await callAgent({
+      system: WORKSPACE_OVERLAY_SYSTEM,
+      user: `${userMsg}\n\nStructured evidence:\n${JSON.stringify(evidenceBundle?.structured_evidence || {}, null, 2)}\n\nDeterministic recommendation to enrich:\n${JSON.stringify({
+        final_decision: baseWorkspace.final_decision,
+        recommended_plan: baseWorkspace.recommended_plan,
+        causal_checks: baseWorkspace.causal_checks,
+      }, null, 2)}`,
+      json: true,
+      maxTokens: 1800,
+    })
+    assertWorkspaceOverlayShape(overlay)
+    const result = applyWorkspaceOverlay(baseWorkspace, overlay)
     const workspace = completeWorkspace(normalized, result, evidenceBundle, {
       requestId,
       startedAt,
       source: 'vertex-ai',
       mode,
     })
-    console.log(`[workspace:${requestId}] ai_call success decision=${workspace.final_decision?.status} checks=${workspace.causal_checks?.filter((check) => check.passed).length || 0}/${workspace.causal_checks?.length || 0} duration_ms=${Date.now() - startedAt}`)
+    console.log(`[workspace:${requestId}] ai_overlay success decision=${workspace.final_decision?.status} checks=${workspace.causal_checks?.filter((check) => check.passed).length || 0}/${workspace.causal_checks?.length || 0} duration_ms=${Date.now() - startedAt}`)
     return workspace
   } catch (err) {
-    console.error(`[workspace:${requestId}] ai_call failed fallback=true error=${err?.message || err}`)
+    console.error(`[workspace:${requestId}] ai_overlay failed fallback=true error=${err?.message || err}`)
     const workspace = fallbackWorkspace(normalized, evidenceBundle, {
       requestId,
       startedAt,
@@ -382,16 +424,34 @@ export async function runMediaBuyingWorkspace(intake) {
   }
 }
 
-function assertWorkspaceShape(result) {
+function assertWorkspaceOverlayShape(result) {
   const missing = []
   if (!result || typeof result !== 'object') missing.push('root object')
-  if (!result?.intake_summary) missing.push('intake_summary')
-  if (!Array.isArray(result?.scenarios) || result.scenarios.length === 0) missing.push('scenarios')
-  if (!result?.recommended_plan || !Array.isArray(result.recommended_plan.ad_sets)) missing.push('recommended_plan.ad_sets')
-  if (!result?.final_decision?.status) missing.push('final_decision.status')
-  if (!result?.paused_execution_spec?.campaign) missing.push('paused_execution_spec.campaign')
+  if (!Array.isArray(result?.evidence) || result.evidence.length === 0) missing.push('evidence')
+  if (!Array.isArray(result?.creative_hypotheses) || result.creative_hypotheses.length === 0) missing.push('creative_hypotheses')
+  if (!Array.isArray(result?.strategy_agents) || result.strategy_agents.length === 0) missing.push('strategy_agents')
   if (missing.length) {
-    throw new Error(`AI workspace JSON incomplete: missing ${missing.join(', ')}`)
+    throw new Error(`AI overlay JSON incomplete: missing ${missing.join(', ')}`)
+  }
+}
+
+function applyWorkspaceOverlay(baseWorkspace, overlay) {
+  return {
+    ...baseWorkspace,
+    evidence: Array.isArray(overlay.evidence) && overlay.evidence.length ? overlay.evidence : baseWorkspace.evidence,
+    creative_hypotheses: Array.isArray(overlay.creative_hypotheses) && overlay.creative_hypotheses.length
+      ? overlay.creative_hypotheses
+      : baseWorkspace.creative_hypotheses,
+    strategy_agents: Array.isArray(overlay.strategy_agents) && overlay.strategy_agents.length
+      ? overlay.strategy_agents
+      : baseWorkspace.strategy_agents,
+    market_research: overlay.market_research && typeof overlay.market_research === 'object'
+      ? overlay.market_research
+      : baseWorkspace.market_research,
+    final_decision: {
+      ...baseWorkspace.final_decision,
+      summary: overlay.final_summary || baseWorkspace.final_decision?.summary,
+    },
   }
 }
 
