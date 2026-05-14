@@ -960,7 +960,7 @@ function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendatio
   const targetCpa = parseMoneyValue(workspace.unit_economics?.target_cpa || workspace.budget_economics?.target_cpa)
   const breakEvenCpa = parseMoneyValue(workspace.unit_economics?.break_even_cpa || workspace.budget_economics?.break_even_cpa)
   const economicsKnown = Number.isFinite(targetCpa) && Number.isFinite(breakEvenCpa) && breakEvenCpa > 0
-  const diffText = JSON.stringify(workspace.plan_diff || {})
+  const claimRewritePresent = hasClaimRewrite(workspace.plan_diff)
   const timelineOrder = (workspace.agent_timeline || []).map((item) => item.agent)
   return [
     {
@@ -993,9 +993,9 @@ function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendatio
     },
     {
       id: 'risky_claim_rewritten',
-      passed: !hasRiskyClaim || /Claim|claim|job|resume|proof|hidden/i.test(diffText),
+      passed: !hasRiskyClaim || claimRewritePresent,
       expected: hasRiskyClaim ? 'claim rewrite in plan_diff' : 'no risky claim rewrite required',
-      actual: hasRiskyClaim ? 'plan_diff inspected' : 'not required',
+      actual: hasRiskyClaim ? (claimRewritePresent ? 'structured claim rewrite found' : 'no structured claim rewrite found') : 'not required',
       detail: 'Risky EvidenceAgent claims must appear in the repair diff.',
     },
     {
@@ -1006,6 +1006,19 @@ function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendatio
       detail: 'Agent timeline must reveal the causal chain in order.',
     },
   ]
+}
+
+function hasClaimRewrite(planDiff) {
+  const items = Array.isArray(planDiff?.items) ? planDiff.items : []
+  return items.some((item) => {
+    const field = String(item?.field || '')
+    const before = String(item?.before || '')
+    const after = String(item?.after || '')
+    const fieldIsClaim = /claim|hook|copy|message/i.test(field)
+    const beforeLooksRisky = /guarantee|guaranteed|land a job|7 days|seven days|outcome promise/i.test(before)
+    const afterLooksSafe = /proof|diagnosis|diagnostic|audit|score|hidden|resume issue|resume issues|readiness|checklist/i.test(after)
+    return fieldIsClaim && beforeLooksRisky && afterLooksSafe
+  })
 }
 
 function pickOriginalRiskyClaim(intake, evidence) {
