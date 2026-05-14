@@ -357,8 +357,9 @@ export async function runMediaBuyingWorkspace(intake) {
       system: MEDIA_BUYER_WORKSPACE_SYSTEM,
       user: userMsg,
       json: true,
-      maxTokens: 2200,
+      maxTokens: 6000,
     })
+    assertWorkspaceShape(result)
     const workspace = completeWorkspace(normalized, result, evidenceBundle, {
       requestId,
       startedAt,
@@ -378,6 +379,19 @@ export async function runMediaBuyingWorkspace(intake) {
     })
     console.log(`[workspace:${requestId}] fallback complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
     return workspace
+  }
+}
+
+function assertWorkspaceShape(result) {
+  const missing = []
+  if (!result || typeof result !== 'object') missing.push('root object')
+  if (!result?.intake_summary) missing.push('intake_summary')
+  if (!Array.isArray(result?.scenarios) || result.scenarios.length === 0) missing.push('scenarios')
+  if (!result?.recommended_plan || !Array.isArray(result.recommended_plan.ad_sets)) missing.push('recommended_plan.ad_sets')
+  if (!result?.final_decision?.status) missing.push('final_decision.status')
+  if (!result?.paused_execution_spec?.campaign) missing.push('paused_execution_spec.campaign')
+  if (missing.length) {
+    throw new Error(`AI workspace JSON incomplete: missing ${missing.join(', ')}`)
   }
 }
 

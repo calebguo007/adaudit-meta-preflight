@@ -110,8 +110,13 @@ async function callVertexAgent({ system, user, json = false, temperature = 0.3, 
   if (json) {
     const preview = content.replace(/\s+/g, ' ').slice(0, 500)
     console.log(`[ai:vertex] raw_json_preview model=${GEMINI_MODEL} chars=${content.length} preview="${preview}"`)
+    const parsed = parseJsonContent(content)
+    if (!parsed) {
+      throw new Error(`Vertex JSON parse failed: ${preview}`)
+    }
+    return parsed
   }
-  return json ? parseJsonContent(content) : content
+  return content
 }
 
 /**
@@ -152,7 +157,9 @@ export async function callAgent({ system, user, json = false, temperature = 0.3,
   const content = data?.choices?.[0]?.message?.content ?? ''
 
   if (!json) return content
-  return parseJsonContent(content)
+  const parsed = parseJsonContent(content)
+  if (!parsed) throw new Error(`AI JSON parse failed: ${content.slice(0, 300)}`)
+  return parsed
 }
 
 /**
