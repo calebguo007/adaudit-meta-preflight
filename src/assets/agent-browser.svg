@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" fill="none">
+  <g filter="url(#shadow)">
+    <path d="M60 10c20 0 36 16 36 36v38c0 20-16 36-36 36S24 104 24 84V46c0-20 16-36 36-36Z" fill="#FBFBF7"/>
+    <path d="M60 10c20 0 36 16 36 36v38c0 20-16 36-36 36S24 104 24 84V46c0-20 16-36 36-36Z" stroke="#D9D4C9" stroke-width="3"/>
+    <path d="M37 52h46v34H37V52Z" fill="#102449" stroke="#102449" stroke-width="3"/>
+    <path d="M43 60h34M43 69h24M43 78h30" stroke="#F7F2E8" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="44" cy="42" r="7" fill="#102449"/>
+    <circle cx="76" cy="42" r="7" fill="#102449"/>
+    <path d="M50 94c6 5 14 5 20 0" stroke="#277F56" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="82" cy="98" r="13" fill="#F7F2E8" stroke="#9A431E" stroke-width="4"/>
+    <path d="M91 107l12 12" stroke="#9A431E" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <defs>
+    <filter id="shadow" x="0" y="0" width="120" height="140" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#102449" flood-opacity=".12"/>
+    </filter>
+  </defs>
+</svg>

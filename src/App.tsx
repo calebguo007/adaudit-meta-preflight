@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import agentBrowser from './assets/agent-browser.svg'
+import agentBudget from './assets/agent-budget.svg'
+import agentGuard from './assets/agent-guard.svg'
+import agentPolicy from './assets/agent-policy.svg'
+import agentVision from './assets/agent-vision.svg'
 
 type Act = 'intake' | 'reviewing' | 'verdict'
 type ToolStatus = 'running' | 'done' | 'error'
@@ -680,6 +685,10 @@ function toolStatus(toolCalls: ToolCall[], tool: string): ToolStatus | 'idle' {
   return call?.status || 'idle'
 }
 
+function toolCallFor(toolCalls: ToolCall[], tool: string) {
+  return toolCalls.find((item) => item.tool === tool)
+}
+
 function latestEvidence(items: EvidenceItem[], source: string) {
   return items.find((item) => item.source_type === source)?.finding
 }
@@ -699,6 +708,8 @@ function PixelOpsWorld({
       name: 'Browser',
       verb: 'reads page',
       tool: 'browser.fetch',
+      avatar: agentBrowser,
+      handoff: 'Landing claims -> planner',
       output: latestEvidence(evidence, 'playwright') || latestEvidence(evidence, 'knowledge_base') || 'waiting for landing-page evidence',
     },
     {
@@ -706,6 +717,8 @@ function PixelOpsWorld({
       name: 'Gemini',
       verb: 'reviews assets',
       tool: 'vision.analyze',
+      avatar: agentVision,
+      handoff: 'Creative risk -> policy',
       output: latestEvidence(evidence, 'vision') || 'waiting for creative signal',
     },
     {
@@ -713,6 +726,8 @@ function PixelOpsWorld({
       name: 'Policy',
       verb: 'flags claims',
       tool: 'policy.lookup',
+      avatar: agentPolicy,
+      handoff: 'Claim rewrite -> coordinator',
       output: latestEvidence(evidence, 'policy_doc') || 'waiting for policy lookup',
     },
     {
@@ -720,6 +735,8 @@ function PixelOpsWorld({
       name: 'Budget',
       verb: 'computes signal',
       tool: 'math.compute',
+      avatar: agentBudget,
+      handoff: 'Ad-set cap -> plan repair',
       output: latestEvidence(evidence, 'knowledge_base') || 'waiting for ad-set math',
     },
     {
@@ -727,6 +744,8 @@ function PixelOpsWorld({
       name: 'Guardrails',
       verb: 'checks causality',
       tool: 'audit.score',
+      avatar: agentGuard,
+      handoff: 'Checks pass -> paused package',
       output: 'verifies PAUSED-only execution',
     },
   ]
@@ -743,15 +762,18 @@ function PixelOpsWorld({
       <div className="aa-pixel-floor" aria-label="Agent tool work visualization">
         {stations.map((station, index) => {
           const status = toolStatus(toolCalls, station.tool)
+          const call = toolCallFor(toolCalls, station.tool)
           return (
             <article key={station.id} className={`aa-pixel-station station-${station.id} is-${status}`} style={{ ['--i' as string]: index }}>
               <div className="aa-pixel-agent" aria-hidden="true">
-                <b /><i />
+                <img src={station.avatar} alt="" />
+                <i />
               </div>
               <div className="aa-pixel-terminal">
-                <span>{station.name}</span>
+                <span>{station.name} agent</span>
                 <strong>{station.verb}</strong>
                 <p>{station.output}</p>
+                <small>{call?.duration_ms ? `${call.duration_ms}ms` : status === 'running' ? 'working' : station.handoff}</small>
               </div>
             </article>
           )
