@@ -1,910 +1,1117 @@
-import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+/* ============================================================================
+   AdAudit — Frontend Design Constitution v1.0
+   ----------------------------------------------------------------------------
+   Aesthetic    : Anthropic restraint + Stripe trust + marketer-friendly clarity.
+                  Light theme on warm paper. Reddit Serif italic for verdict.
+                  Inter for UI. Geist Mono only for technical accents.
+   User journey : Act 1 Intake → Act 2 Reviewing → Act 3 Verdict
+                  → Act 4 Revise (optional) → Epilogue (paused launch).
+                  State machine on one canvas; no router; surfaces morph.
+   Motion       : Only ease cubic-bezier(0.16, 1, 0.3, 1). Only fade + 6-8px
+                  translate. No spinners, no bounce, no scale. Stagger 80/150ms.
+   Agent feel   : Tool Call Strips (collapsed) + Browser Cameo + Wordmark
+                  scan-light + Agent Cursor + Receipt. Premium, never geek.
+   Anti-patterns: No dark dashboard. No terminal logs. No tabs. No 5-step
+                  sidebar. No pixel art. No emoji. No spinners.
+   ============================================================================ */
+
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
-type Intake = {
+// ---------- types (will grow phase by phase) ----------
+
+type Act = 'intake' | 'reviewing' | 'verdict' | 'revising' | 'done'
+
+type IntakeForm = {
   product: string
-  product_url: string
-  landing_page: string
-  platform: string
-  budget_usd: number
-  target_cpa: number
-  aov: number
-  gross_margin: number
-  lead_to_customer_rate: number
-  ltv: number
-  objective: string
-  kpi_priority: string[]
+  budget: string
   audience: string
-  assets: string
-  competitors: string
-  constraints: string
-  pixel_status: string
+  claim: string
+  creativeDataUrl?: string
+  creativeName?: string
 }
 
-type Evidence = { source: string; finding: string; impact: string }
-type Hypothesis = { name: string; hook: string; emotion: string; proof: string; risk: string; success_metric: string }
-type StrategyAgent = {
-  agent: string
-  status: 'pass' | 'watch' | 'block'
-  finding: string
-  decision_impact: string
+const EMPTY_FORM: IntakeForm = {
+  product: '',
+  budget: '',
+  audience: '',
+  claim: '',
 }
-type MarketResearch = {
-  category_patterns: string[]
-  white_space: string[]
-  landing_page_gaps: string[]
-}
-type DeliveryReadiness = {
-  status: string
-  checks: { name: string; status: 'pass' | 'warn' | 'fail'; reason: string }[]
-}
-type BudgetSignal = {
-  status: string
-  signal_density: string
-  learning_risk: string
-  recommended_ad_set_count: number
-}
-type AudienceStrategy = {
-  mode: string
-  rationale: string
-  control_tradeoff: string
-}
-type UnitEconomics = {
-  status: string
-  target_cpa: string
-  break_even_cpa: string
-  break_even_roas: string
-  confidence: string
-  assumptions: string[]
-}
-type KillScaleRules = {
-  kill: string[]
-  hold: string[]
-  scale: string[]
-}
-type MonitoringWindow = {
-  window: string
-  checks: string[]
-}
-type EvidenceArtifact = {
-  type: string
-  label: string
-  uri: string
-  text_uri?: string
-  source_url?: string
-  summary: string
-}
-type EvidenceArtifacts = {
-  job_id: string
-  mode: string
-  artifacts: EvidenceArtifact[]
-  structured_evidence: {
-    hook_patterns?: string[]
-    risky_claims?: string[]
-    cta?: string
-    proof_mechanisms?: string[]
-    landing_page_gaps?: string[]
-    implications?: string[]
-  }
-  notes: string[]
-}
-type AgentTimelineItem = {
-  agent: string
-  status: 'pass' | 'watch' | 'block'
-  finding: string
-  impact: string
-  affects: string[]
-}
-type PlanDiff = {
-  status: string
-  summary: string
-  items: { field: string; before: string; after: string; reason: string }[]
-}
-type CausalCheck = {
-  id: string
-  passed: boolean
-  expected: string | number
-  actual: string | number
-  detail: string
-}
-type Scenario = {
-  id: string
-  name: string
-  objective: string
-  budget_usd: number
-  structure: string
-  expected_signal: string
-  kpi_ranges: Record<string, string>
-  risk: string
-  verdict: string
-  reason: string
-}
-type AdSet = { name: string; audience: string; budget_usd: number; creative_hypothesis: string; optimization_goal: string }
-type AuditorReview = { auditor: string; status: 'pass' | 'warn' | 'fail'; finding: string; mitigation: string }
-type Workspace = {
-  intake_summary: {
-    product: string
-    platform: string
-    budget_usd: number
-    objective: string
-    kpi_priority: string[]
-    audience: string
-    constraints: string[]
-  }
-  evidence: Evidence[]
-  evidence_artifacts?: EvidenceArtifacts
-  creative_hypotheses: Hypothesis[]
-  agent_timeline?: AgentTimelineItem[]
-  plan_diff?: PlanDiff
-  causal_checks?: CausalCheck[]
-  strategy_agents?: StrategyAgent[]
-  market_research?: MarketResearch
-  delivery_readiness?: DeliveryReadiness
-  budget_signal?: BudgetSignal
-  audience_strategy?: AudienceStrategy
-  unit_economics?: UnitEconomics
-  scenarios: Scenario[]
-  recommended_plan: {
-    scenario_id: string
-    objective?: string
-    why_this_wins: string[]
-    why_others_lose: string[]
-    campaign_name: string
-    ad_sets: AdSet[]
-  }
-  auditor_reviews: AuditorReview[]
-  final_decision: { status: 'HOLD' | 'FIX_FIRST' | 'READY_PAUSED'; summary: string; human_approval_required: boolean }
-  kill_scale_rules?: KillScaleRules
-  monitoring_plan_72h?: MonitoringWindow[]
-  paused_execution_spec: {
-    status: string
-    executor_mode: string
-    campaign: { name: string; objective: string; status: string }
-    safety_notes: string[]
-  }
-}
-type ExecutorResult = { executor_mode: string; status: string; campaign_id: string; adset_ids: string[]; ad_ids: string[]; note: string }
-type AiInfo = { baseUrl?: string; model?: string; hasKey?: boolean }
 
-const defaultIntake: Intake = {
+const SAMPLE_FORM: IntakeForm = {
   product: 'AI Resume Optimizer',
-  product_url: 'https://example.com/resume-ai',
-  landing_page: 'Hero promises resume clarity and ATS readiness. CTA is "Get my resume audit". No job guarantee on the page.',
-  platform: 'Meta',
-  budget_usd: 500,
-  target_cpa: 35,
-  aov: 99,
-  gross_margin: 80,
-  lead_to_customer_rate: 12,
-  ltv: 420,
-  objective: 'Lead generation',
-  kpi_priority: ['CPA', 'CTR', 'CPC'],
-  audience: 'US early-career job seekers and career switchers, age 22-45',
-  assets: 'Static resume before/after mockup, proof-first copy, one risky draft saying "land a job in 7 days".',
-  competitors: 'Teal, Rezi, Kickresume, Resume Worded',
-  constraints: 'No automatic spend. Avoid guaranteed employment outcomes. Keep first flight under $500.',
-  pixel_status: 'unknown',
+  budget: '500',
+  audience: 'US job seekers',
+  claim: 'Land a job in 7 days',
 }
 
-function providerName(baseUrl?: string) {
-  if (!baseUrl) return 'AI provider'
-  if (baseUrl.includes('vultrinference')) return 'Vultr Serverless Inference'
-  if (baseUrl.includes('tokendance')) return 'DeepSeek gateway'
-  if (baseUrl.includes('openai')) return 'OpenAI'
-  try { return new URL(baseUrl).hostname } catch { return 'AI provider' }
+// ---------- masthead (document-style top strip) ----------
+
+function specId() {
+  // stable ID format like a real spec sheet: AA-YYYY-MM-DD-XXX
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const tail = String((d.getHours() * 60 + d.getMinutes()) % 999).padStart(3, '0')
+  return `AA-${y}-${m}-${day}-${tail}`
 }
 
-function statusClass(status?: string) {
-  if (status === 'pass' || status === 'ready' || status === 'sufficient' || status === 'READY_PAUSED' || status === 'recommended' || status === 'low') return 'good'
-  if (status === 'warn' || status === 'watch' || status === 'thin' || status === 'estimated' || status === 'FIX_FIRST' || status === 'viable' || status === 'medium') return 'warn'
-  if (status === 'fail' || status === 'block' || status === 'blocked' || status === 'underpowered' || status === 'HOLD' || status === 'not_recommended' || status === 'high') return 'bad'
-  return 'neutral'
+function PauseSigil({ working }: { working: boolean }) {
+  // The pause sigil — two thin vertical bars echoing the PAUSED-by-default
+  // safety boundary that defines the entire product.
+  return (
+    <span className={`pause-sigil ${working ? 'is-working' : ''}`} aria-hidden="true">
+      <span className="bar" />
+      <span className="bar" />
+    </span>
+  )
 }
 
-function formatStatus(status?: string) {
-  if (!status) return ''
-  return status.replace(/_/g, ' ').toUpperCase()
+function Masthead({ working, specStatus }: { working: boolean; specStatus: string }) {
+  const now = new Date()
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return (
+    <header className="masthead">
+      <div className="masthead-rows">
+        <div className="masthead-row">
+          <div className="wordmark">
+            <PauseSigil working={working} />
+            <span>AdAudit</span>
+            <span className="wordmark-tag">Guarded media buyer</span>
+          </div>
+          <div className="spec-id">
+            Spec <strong>#{specId()}</strong>
+          </div>
+        </div>
+        <div className={`masthead-row meta ${working ? 'is-working' : ''}`}>
+          <span>Issued by AdAudit · gemini 2.5-flash</span>
+          <span>Status: <strong style={{ color: 'var(--ink)' }}>{specStatus}</strong></span>
+          <span className="pulse-row">
+            <span className="pulse" aria-hidden="true" />
+            <span>{working ? 'Reviewing' : 'Ready'} · {hh}:{mm} UTC</span>
+          </span>
+        </div>
+      </div>
+    </header>
+  )
 }
 
-function compactStatus(status?: string) {
-  if (status === 'not_recommended') return 'NOT REC.'
-  if (status === 'recommended') return 'RECOMMENDED'
-  return formatStatus(status)
+// ---------- Act 1 — Intake ----------
+
+const AUDIENCE_CHIPS = [
+  'US job seekers',
+  'Early-career professionals',
+  'Career switchers',
+  'SaaS founders',
+  'Remote workers',
+]
+
+function Field({
+  num,
+  label,
+  delay,
+  children,
+}: {
+  num: string
+  label: string
+  delay: number
+  children: React.ReactNode
+}) {
+  return (
+    <div className="field" style={{ animationDelay: `${delay}ms` }}>
+      <div className="field-section">
+        <span className="sigil">§</span> {num}
+      </div>
+      <div className="field-body">
+        <div className="field-label">{label}</div>
+        {children}
+      </div>
+    </div>
+  )
 }
 
-function money(n?: number) {
-  return typeof n === 'number' ? `$${n.toLocaleString()}` : '-'
+// ---------- BudgetHint — agent's first words: live math under the budget field ----------
+
+function BudgetHint({ budget }: { budget: string }) {
+  const n = parseInt(budget || '0', 10) || 0
+  if (n < 50) return null
+  const clicksLow = Math.round(n / 3.0)
+  const clicksHigh = Math.round(n / 1.5)
+  const adSets = n >= 1000 ? 3 : n >= 300 ? 2 : 1
+  const perSet = Math.round(n / adSets)
+
+  return (
+    <div className="field-hint" aria-live="polite">
+      <span className="hint-approx">≈</span>
+      <span>
+        <strong>{clicksLow}–{clicksHigh}</strong> clicks @ $1.50–3.00 CPC
+      </span>
+      <span className="hint-sep">·</span>
+      <span className="hint-reco">
+        recommends <strong>{adSets} ad set{adSets > 1 ? 's' : ''}</strong> (${perSet} each)
+      </span>
+    </div>
+  )
 }
 
-function App() {
-  const [intake, setIntake] = useState<Intake>(defaultIntake)
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
-  const [executor, setExecutor] = useState<ExecutorResult | null>(null)
-  const [ai, setAi] = useState<AiInfo>({})
-  const [loading, setLoading] = useState(false)
-  const [executing, setExecuting] = useState(false)
-  const [error, setError] = useState('')
-  const [analysisMode, setAnalysisMode] = useState<'live' | 'demo' | null>(null)
+// ---------- BriefPreview — the live memorandum on the right ----------
+
+function PreviewSection({
+  num,
+  label,
+  value,
+  placeholder = '—',
+}: {
+  num: string
+  label: string
+  value?: string
+  placeholder?: string
+}) {
+  const filled = (value || '').trim().length > 0
+  return (
+    <div className={`preview-section ${filled ? 'is-filled' : ''}`}>
+      <div className="preview-section-head">
+        <span className="num">§ {num}</span>
+        <span className="label">{label}</span>
+      </div>
+      <div className="preview-section-value">
+        {filled ? value : <span className="placeholder">{placeholder}</span>}
+      </div>
+    </div>
+  )
+}
+
+function BriefPreview({ form }: { form: IntakeForm }) {
+  // Operational metrics, not literary prose. Marketers see structure + risk + readiness.
+  const sectionsComplete = [
+    form.product,
+    form.budget,
+    form.audience,
+    form.claim,
+    form.creativeDataUrl,
+  ].filter((v) => (v || '').toString().trim().length > 0).length
+
+  const budgetNum = parseInt(form.budget || '0', 10) || 0
+  const adSetCount = budgetNum >= 1000 ? 3 : budgetNum >= 300 ? 2 : 1
+  const budgetPerSet = adSetCount > 0 ? Math.round(budgetNum / adSetCount) : 0
+
+  const claimLower = (form.claim || '').toLowerCase()
+  const claimRisk =
+    !claimLower
+      ? 'low'
+      : /\d+\s*(day|week|hour)|guarantee|land a job|get hired|in \d+|lose \d+/i.test(claimLower)
+        ? 'high'
+        : /promise|outcome|win|best|number one/i.test(claimLower)
+          ? 'medium'
+          : 'low'
+
+  return (
+    <aside className="brief-preview" aria-label="Live campaign brief preview">
+      <div className="brief-preview-eyebrow">
+        <span>BRIEF · DRAFT</span>
+        <span className="rule" aria-hidden="true" />
+        <span>{sectionsComplete} / 5</span>
+      </div>
+
+      <dl className="brief-preview-meta">
+        <div><dt>Platform</dt><dd>Meta · Lead objective</dd></div>
+        <div><dt>Spend</dt><dd>{budgetNum > 0 ? `$${budgetNum} USD` : '—'}</dd></div>
+        <div><dt>Ad sets</dt><dd>{budgetNum > 0 ? `${adSetCount} (${budgetPerSet}/set)` : '—'}</dd></div>
+        <div><dt>Status</dt><dd>Draft · paused-by-default</dd></div>
+      </dl>
+
+      <div className="brief-preview-rule" />
+
+      <div className="brief-preview-body">
+        <PreviewSection num="1.1" label="Product" value={form.product} />
+        <PreviewSection
+          num="1.2"
+          label="Budget"
+          value={form.budget ? `$${form.budget} USD · Meta` : ''}
+        />
+        <PreviewSection num="1.3" label="Audience" value={form.audience} />
+        <PreviewSection
+          num="1.4"
+          label="Risky claim"
+          value={form.claim}
+          placeholder="None disclosed"
+        />
+        <PreviewSection
+          num="1.5"
+          label="Creative attachment"
+          value={form.creativeDataUrl ? (form.creativeName || 'image attached') : ''}
+          placeholder="No creative attached"
+        />
+      </div>
+
+      {/* Vital signs band — mini bar chart language, ad-pro recognizable */}
+      <div className="vital-signs">
+        <div className="vital-signs-head">
+          <span>CAMPAIGN HEALTH</span>
+          <span className="rule" aria-hidden="true" />
+        </div>
+        <VitalSign
+          label="Completeness"
+          tone="signature"
+          filled={sectionsComplete}
+          value={`${sectionsComplete} / 5`}
+        />
+        <VitalSign
+          label="Claim risk"
+          tone={claimRisk}
+          filled={claimRisk === 'high' ? 5 : claimRisk === 'medium' ? 3 : 1}
+          value={claimRisk.toUpperCase()}
+        />
+        <VitalSign
+          label="Budget signal"
+          tone="signature"
+          filled={budgetNum >= 1000 ? 5 : budgetNum >= 500 ? 3 : budgetNum >= 100 ? 1 : 0}
+          value={
+            budgetNum === 0
+              ? '—'
+              : budgetNum >= 1000
+                ? 'STRONG'
+                : budgetNum >= 500
+                  ? 'VIABLE'
+                  : 'THIN'
+          }
+        />
+        <VitalSign
+          label="Vision review"
+          tone={form.creativeDataUrl ? 'ready' : 'idle'}
+          filled={form.creativeDataUrl ? 5 : 0}
+          value={form.creativeDataUrl ? 'READY' : 'NO CREATIVE'}
+        />
+      </div>
+    </aside>
+  )
+}
+
+type VitalTone = 'signature' | 'low' | 'medium' | 'high' | 'ready' | 'idle'
+
+function VitalSign({
+  label,
+  tone,
+  filled,
+  value,
+}: {
+  label: string
+  tone: VitalTone
+  filled: number
+  value: string
+}) {
+  return (
+    <div className={`vital-row tone-${tone}`}>
+      <span className="vital-label">{label}</span>
+      <span className="vital-pips" aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span key={i} className={`pip ${i < filled ? 'is-on' : ''}`} />
+        ))}
+      </span>
+      <span className="vital-value">{value}</span>
+    </div>
+  )
+}
+
+function Act1Intake({
+  form,
+  setForm,
+  onSubmit,
+  onLoadSample,
+}: {
+  form: IntakeForm
+  setForm: (next: IntakeForm) => void
+  onSubmit: () => void
+  onLoadSample: () => void
+}) {
+  const [dragOver, setDragOver] = useState(false)
+
+  const update = (patch: Partial<IntakeForm>) => setForm({ ...form, ...patch })
+
+  const canSubmit = form.product.trim().length > 1 && form.budget.trim().length > 0
+
+  const onFile = (file: File | undefined) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      update({ creativeDataUrl: String(reader.result), creativeName: file.name })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <section className="act1">
+      <div className="act1-eyebrow">
+        <span className="section-num">§ 1 · CAMPAIGN INTAKE</span>
+        <span className="rule" aria-hidden="true" />
+        <span>5 sections</span>
+      </div>
+      <h1 className="act1-title">Brief the strategist.</h1>
+      <p className="act1-subtitle">
+        Five sections. I'll review the spec like a senior media buyer — pull category
+        data, check Meta's policy line, run the budget math — <em>before</em> any spend
+        goes live. Attach a creative and I'll run vision on it.
+      </p>
+
+      <div className="act1-grid">
+       <div className="act1-form">
+      <Field num="1.1" label="Product" delay={0}>
+        <input
+          className="field-input"
+          type="text"
+          autoFocus
+          placeholder="What are you advertising?"
+          value={form.product}
+          onChange={(e) => update({ product: e.target.value })}
+        />
+      </Field>
+
+      <Field num="1.2" label="Budget" delay={60}>
+        <div className="field-prefix-row">
+          <span className="field-prefix">$</span>
+          <input
+            className="field-input"
+            inputMode="numeric"
+            placeholder="500"
+            value={form.budget}
+            onChange={(e) => update({ budget: e.target.value.replace(/[^0-9]/g, '') })}
+          />
+          <span className="field-prefix" style={{ color: 'var(--gray-2)', fontSize: 13, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
+            USD · META
+          </span>
+        </div>
+        <BudgetHint budget={form.budget} />
+      </Field>
+
+      <Field num="1.3" label="Audience" delay={120}>
+        <input
+          className="field-input"
+          type="text"
+          placeholder="Who should see this?"
+          value={form.audience}
+          onChange={(e) => update({ audience: e.target.value })}
+        />
+        <div className="field-chips">
+          {AUDIENCE_CHIPS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className="field-chip"
+              onClick={() => update({ audience: c })}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field num="1.4" label="Risky claim · optional" delay={180}>
+        <textarea
+          className="field-textarea"
+          rows={2}
+          placeholder="Anything in your copy that promises an outcome?"
+          value={form.claim}
+          onChange={(e) => update({ claim: e.target.value })}
+        />
+      </Field>
+
+      <Field num="1.5" label="Creative · optional" delay={240}>
+        <label
+          className={`dropzone ${dragOver ? 'is-hover' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragOver(false)
+            onFile(e.dataTransfer.files?.[0])
+          }}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => onFile(e.target.files?.[0] || undefined)}
+          />
+          {!form.creativeDataUrl ? (
+            <>
+              <div className="dropzone-text">
+                <strong>Drop your ad mockup</strong> or click to upload
+              </div>
+              <div className="dropzone-hint">PNG · JPG · up to 4 MB · routed to Gemini Vision</div>
+            </>
+          ) : (
+            <div className="dropzone-preview">
+              <img src={form.creativeDataUrl} alt={form.creativeName || 'uploaded'} />
+            </div>
+          )}
+        </label>
+      </Field>
+
+      <div className="act1-actions" style={{ animationDelay: '320ms' }}>
+        <button
+          type="button"
+          className={`btn-primary ${canSubmit ? 'is-ready' : ''}`}
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          File the brief
+          <span className="btn-arrow">→</span>
+        </button>
+        <button type="button" className="btn-ghost" onClick={onLoadSample}>
+          Try a sample
+        </button>
+        <span style={{
+          marginLeft: 'auto',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--gray-1)',
+        }}>
+          Required §1.1, §1.2
+        </span>
+      </div>
+       </div>
+        <BriefPreview form={form} />
+      </div>
+    </section>
+  )
+}
+
+// ---------- types from /api/workspace/stream events ----------
+
+type EvidenceItem = {
+  id: string
+  source_type: 'playwright' | 'knowledge_base' | 'policy_doc' | 'competitor_scrape' | 'vision' | string
+  source_url?: string
+  finding: string
+  impact?: string
+  stage_id?: string
+  ts?: number
+}
+
+type BrowserSession = {
+  id: string
+  url: string
+  title?: string
+  highlighted_text?: string
+  screenshot_url?: string
+  ts?: number
+}
+
+type WorkspaceResult = {
+  final_decision?: {
+    status?: 'READY_PAUSED' | 'HOLD' | 'FIX_FIRST' | string
+    summary?: string
+    blockers?: string[]
+  }
+  causal_checks?: Array<{ name: string; status: string; reason?: string }>
+  // (full schema lives in backend; this is what UI consumes)
+  [k: string]: unknown
+}
+
+// ---------- SSE consumer for /api/workspace/stream ----------
+
+type StreamHandlers = {
+  onStageStart: (stage: { stage_id: string; label?: string }) => void
+  onToolStart: (call: ToolCall) => void
+  onToolDone: (id: string, patch: Partial<ToolCall>) => void
+  onToolError: (id: string, error: string) => void
+  onBrowserOpen: (session: BrowserSession) => void
+  onBrowserClose: (id: string) => void
+  onEvidence: (e: EvidenceItem) => void
+  onWorkspaceDone: (w: WorkspaceResult) => void
+  onError: (msg: string) => void
+}
+
+async function streamWorkspace(
+  intake: Record<string, unknown>,
+  signal: AbortSignal,
+  h: StreamHandlers,
+  opts: { demoMode?: boolean } = { demoMode: true },
+) {
+  const url = opts.demoMode ? '/api/workspace/stream?demo_mode=true' : '/api/workspace/stream'
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(intake),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '')
+    h.onError(`Workspace stream failed: ${res.status} ${text.slice(0, 200)}`)
+    return
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, idx)
+      buf = buf.slice(idx + 2)
+      let evt = 'message'
+      let data = ''
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) evt = line.slice(6).trim()
+        else if (line.startsWith('data:')) data = line.slice(5).trim()
+      }
+      if (!data) continue
+      let p: any
+      try { p = JSON.parse(data) } catch { continue }
+
+      switch (evt) {
+        case 'stage_start':
+          h.onStageStart({ stage_id: p.stage_id, label: p.label })
+          break
+        case 'tool_call_start':
+          h.onToolStart({
+            id: p.id,
+            tool: p.tool,
+            summary: p.summary || '',
+            status: 'running',
+            input: p.input,
+          })
+          break
+        case 'tool_call_done':
+          h.onToolDone(p.id, {
+            status: 'done',
+            duration_ms: p.duration_ms,
+            size_bytes: p.size_bytes,
+            http_status: p.http_status,
+            meta_extra: p.meta_extra,
+            output: p.output_full || p.output_summary,
+            summary: p.output_summary || undefined,
+          })
+          break
+        case 'tool_call_error':
+          h.onToolError(p.id, p.error || 'error')
+          break
+        case 'browser_open':
+          h.onBrowserOpen({
+            id: p.id,
+            url: p.url,
+            title: p.title,
+            highlighted_text: p.highlighted_text,
+            screenshot_url: p.screenshot_url,
+          })
+          break
+        case 'browser_close':
+          h.onBrowserClose(p.id)
+          break
+        case 'evidence_arrived':
+          h.onEvidence({
+            id: p.id,
+            source_type: p.source_type,
+            source_url: p.source_url,
+            finding: p.finding,
+            impact: p.impact,
+            stage_id: p.stage_id,
+          })
+          break
+        case 'workspace_done':
+          h.onWorkspaceDone((p.workspace || p) as WorkspaceResult)
+          break
+        case 'end':
+        case 'error':
+          // handled by closure end
+          break
+      }
+    }
+  }
+}
+
+// ---------- BrowserCameo — overlay panel when agent visits a URL ----------
+
+const SOURCE_LABELS: Record<string, string> = {
+  playwright: 'Playwright',
+  knowledge_base: 'Knowledge base',
+  policy_doc: 'Policy doc',
+  competitor_scrape: 'Competitor library',
+  vision: 'Gemini Vision',
+}
+
+function BrowserCameo({ session }: { session: BrowserSession | null }) {
+  if (!session) return null
+  // Stylized representation. If a real screenshot_url arrives, use it; else
+  // render the URL + highlighted text excerpt as a typographic page mockup.
+  const host = (() => {
+    try { return new URL(session.url).host } catch { return session.url }
+  })()
+
+  return (
+    <aside className="browser-cameo" aria-live="polite">
+      <div className="bc-chrome">
+        <span className="bc-dots">
+          <span /><span /><span />
+        </span>
+        <span className="bc-addr">
+          <span className="bc-pad">⊙</span>
+          <span className="bc-url">{session.url}</span>
+        </span>
+        <span className="bc-tag">AdAudit Browser</span>
+      </div>
+      <div className="bc-body">
+        {session.screenshot_url ? (
+          <img src={session.screenshot_url} alt={session.title || session.url} />
+        ) : (
+          <>
+            <div className="bc-eyebrow">{host}</div>
+            <div className="bc-title">{session.title || 'Document'}</div>
+            <div className="bc-rule" />
+            <div className="bc-text">
+              {session.highlighted_text || 'Reading page content…'}
+            </div>
+          </>
+        )}
+      </div>
+    </aside>
+  )
+}
+
+// ---------- EvidencePanel — citations as agent collects them ----------
+
+function EvidencePanel({ items }: { items: EvidenceItem[] }) {
+  return (
+    <div className="evidence-list">
+      {items.length === 0 ? (
+        <div className="act2-placeholder">
+          <span className="placeholder-card" />
+          <span className="placeholder-card" />
+        </div>
+      ) : (
+        items.map((e, i) => (
+          <article
+            key={e.id || i}
+            className="evidence-item"
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <div className="evidence-head">
+              <span className={`evidence-source source-${e.source_type}`}>
+                {SOURCE_LABELS[e.source_type] || e.source_type}
+              </span>
+              {e.source_url && (
+                <a
+                  href={e.source_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="evidence-url"
+                >
+                  {(() => {
+                    try { return new URL(e.source_url).host } catch { return e.source_url }
+                  })()}
+                </a>
+              )}
+            </div>
+            <div className="evidence-finding">{e.finding}</div>
+            {e.impact && <div className="evidence-impact">→ {e.impact}</div>}
+          </article>
+        ))
+      )}
+    </div>
+  )
+}
+
+// ---------- ToolCall — operational log line (Vercel/Linear ops aesthetic) ----------
+
+type ToolStatus = 'pending' | 'running' | 'done' | 'error'
+
+type ToolCall = {
+  id: string
+  tool: string
+  summary: string
+  status: ToolStatus
+  duration_ms?: number
+  size_bytes?: number
+  http_status?: number
+  meta_extra?: string
+  input?: Record<string, unknown>
+  output?: string
+}
+
+// MOCK_TOOL_CALLS removed in Phase 3.5 — real ToolCall[] now flows from
+// /api/workspace/stream SSE events. Keep this comment for archaeology.
+
+function ToolCallRow({
+  call,
+  expanded,
+  onToggle,
+}: {
+  call: ToolCall
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const mark =
+    call.status === 'done'
+      ? '✓'
+      : call.status === 'running'
+        ? '◐'
+        : call.status === 'error'
+          ? '✕'
+          : '○'
+
+  const metaBits: string[] = []
+  if (call.duration_ms != null) metaBits.push(`${call.duration_ms}ms`)
+  if (call.size_bytes != null) metaBits.push(`${(call.size_bytes / 1024).toFixed(1)}KB`)
+  if (call.http_status != null) metaBits.push(String(call.http_status))
+  if (call.meta_extra) metaBits.push(call.meta_extra)
+
+  return (
+    <div className={`toolcall toolcall-${call.status} ${expanded ? 'is-expanded' : ''}`}>
+      <button type="button" className="toolcall-row" onClick={onToggle}>
+        <span className="tc-mark">{mark}</span>
+        <span className="tc-tool">{call.tool}</span>
+        <span className="tc-summary">{call.summary}</span>
+        <span className="tc-meta">{metaBits.join(' · ')}</span>
+        <span className="tc-chev">{expanded ? '▴' : '▾'}</span>
+      </button>
+      {expanded && (call.input || call.output) && (
+        <div className="toolcall-detail">
+          {call.input && (
+            <div className="tc-detail-row">
+              <span className="tc-detail-label">Input</span>
+              <pre className="tc-detail-value">{JSON.stringify(call.input, null, 2)}</pre>
+            </div>
+          )}
+          {call.output && (
+            <div className="tc-detail-row">
+              <span className="tc-detail-label">Output</span>
+              <div className="tc-detail-value tc-detail-text">{call.output}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolCallStrip({ calls }: { calls: ToolCall[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const doneCount = calls.filter((c) => c.status === 'done').length
+
+  return (
+    <>
+      <div className="act2-eyebrow">
+        <span>TOOL CALLS</span>
+        <span className="rule" aria-hidden="true" />
+        <span>
+          {doneCount} / {calls.length} complete
+        </span>
+      </div>
+      <div className="toolcalls">
+        {calls.map((c) => (
+          <ToolCallRow
+            key={c.id}
+            call={c}
+            expanded={expanded.has(c.id)}
+            onToggle={() => toggle(c.id)}
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+// ---------- CampaignCard — the visual hero for Act 2 ----------
+
+function CampaignCard({ form }: { form: IntakeForm }) {
+  const budgetNum = parseInt(form.budget || '0', 10) || 0
+  const adSets = budgetNum >= 1000 ? 3 : budgetNum >= 300 ? 2 : 1
+  const claimLower = (form.claim || '').toLowerCase()
+  const claimRisk =
+    !claimLower
+      ? null
+      : /\d+\s*(day|week|hour)|guarantee|land a job|get hired|in \d+|lose \d+/i.test(claimLower)
+        ? 'high'
+        : /promise|outcome|win|best|number one/i.test(claimLower)
+          ? 'medium'
+          : 'low'
+
+  return (
+    <section className="campaign-card" aria-label="Campaign under review">
+      <div className="campaign-card-eyebrow">
+        <span>§ THE CAMPAIGN</span>
+        <span className="rule" aria-hidden="true" />
+        <span>under review</span>
+      </div>
+      <div className="campaign-card-body">
+        <div className="campaign-card-text">
+          <h2 className="campaign-card-title">
+            {form.product || 'Untitled campaign'}
+          </h2>
+          <div className="campaign-card-divider" />
+          <div className="campaign-card-line">
+            <span className="cc-stat">
+              <em>${budgetNum || '—'}</em>
+              <small>USD</small>
+            </span>
+            <span className="cc-sep">·</span>
+            <span className="cc-stat">
+              <em>{adSets}</em>
+              <small>ad set{adSets > 1 ? 's' : ''}</small>
+            </span>
+            <span className="cc-sep">·</span>
+            <span className="cc-stat">
+              <em>META</em>
+              <small>LEADS</small>
+            </span>
+          </div>
+          <div className="campaign-card-line second">
+            <span className="cc-tag">{form.audience || 'Audience pending'}</span>
+            {claimRisk && (
+              <span className={`cc-risk-tag risk-${claimRisk}`}>
+                <span className="dot" />
+                CLAIM RISK · {claimRisk.toUpperCase()}
+              </span>
+            )}
+          </div>
+        </div>
+        {form.creativeDataUrl ? (
+          <div className="campaign-card-thumb">
+            <img src={form.creativeDataUrl} alt={form.creativeName || 'creative'} />
+          </div>
+        ) : (
+          <div className="campaign-card-thumb is-empty">
+            <span>NO CREATIVE</span>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ---------- Act 2 — Strategist review (shell + state) ----------
+
+function Act2Workspace({
+  form,
+  onBack,
+  onWorkspaceDone,
+}: {
+  form: IntakeForm
+  onBack: () => void
+  onWorkspaceDone?: (w: WorkspaceResult) => void
+}) {
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([])
+  const [browserCameo, setBrowserCameo] = useState<BrowserSession | null>(null)
+  const [stageLabel, setStageLabel] = useState<string>('Booting strategist')
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const ranRef = useRef(false)
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((data) => setAi(data.ai || {}))
-      .catch(() => setAi({}))
-  }, [])
+    if (ranRef.current) return
+    ranRef.current = true
 
-  const recommended = useMemo(
-    () => workspace?.scenarios.find((s) => s.id === workspace.recommended_plan.scenario_id),
-    [workspace],
-  )
-
-  async function analyze(demoMode = false) {
-    setLoading(true)
-    setError('')
-    setExecutor(null)
-    try {
-      const res = await fetch('/api/workspace/analyze', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...intake, demo_mode: demoMode }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Analysis failed')
-      setWorkspace(data.workspace)
-      setAnalysisMode(demoMode ? 'demo' : 'live')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed')
-    } finally {
-      setLoading(false)
+    const ctrl = new AbortController()
+    const intake = {
+      product: form.product || 'AI Resume Optimizer',
+      budget_usd: parseInt(form.budget || '500', 10) || 500,
+      audience: form.audience || 'US job seekers',
+      claim: form.claim || undefined,
     }
-  }
 
-  async function executePaused() {
-    if (!workspace) return
-    setExecuting(true)
-    setError('')
-    try {
-      const res = await fetch('/api/campaign/execute', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: 'PAUSED', plan: workspace.paused_execution_spec }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Execution failed')
-      setExecutor(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Execution failed')
-    } finally {
-      setExecuting(false)
-    }
-  }
+    streamWorkspace(intake, ctrl.signal, {
+      onStageStart: ({ label, stage_id }) => {
+        setStageLabel(label || stage_id || 'working')
+      },
+      onToolStart: (call) => {
+        setToolCalls((prev) => [...prev, call])
+      },
+      onToolDone: (id, patch) => {
+        setToolCalls((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+      },
+      onToolError: (id, error) => {
+        setToolCalls((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, status: 'error', summary: `${t.summary} · ${error}` } : t,
+          ),
+        )
+      },
+      onBrowserOpen: (s) => setBrowserCameo(s),
+      onBrowserClose: () => setBrowserCameo(null),
+      onEvidence: (e) => setEvidence((prev) => [...prev, e]),
+      onWorkspaceDone: (w) => {
+        setStageLabel('Verdict ready')
+        onWorkspaceDone?.(w)
+      },
+      onError: (msg) => setStreamError(msg),
+    }).catch((err) => {
+      if ((err as Error).name !== 'AbortError') setStreamError((err as Error).message)
+    })
 
-  function patch<K extends keyof Intake>(key: K, value: Intake[K]) {
-    setIntake((prev) => ({ ...prev, [key]: value }))
-  }
+    return () => ctrl.abort()
+  }, [form, onWorkspaceDone])
+
+  const stageCount = toolCalls.length
+  const doneCount = toolCalls.filter((c) => c.status === 'done').length
 
   return (
-    <main className="workspace-shell">
-      <aside className="workspace-rail">
-        <div className="brand-lockup">
-          <div className="brand-mark">AA</div>
-          <div>
-            <strong>AdAudit</strong>
-            <span>Guarded media buyer</span>
-          </div>
-        </div>
+    <section className="act2">
+      <div className="act1-eyebrow">
+        <span className="section-num" style={{ color: 'var(--signature)' }}>§ 2 · STRATEGIST REVIEW</span>
+        <span className="rule" aria-hidden="true" />
+        <span>in session</span>
+      </div>
+      <h1 className="act1-title">Reviewing your brief.</h1>
+      <p className="act1-subtitle">
+        Pulling category data, checking Meta's policy line, running the budget math.
+        <em> Tool calls and evidence will surface here as I work.</em>
+      </p>
 
-        <nav className="rail-steps" aria-label="Workflow">
-          {['Intake', 'Evidence', 'Timeline', 'Plan Diff', 'Paused Spec'].map((step, index) => (
-            <span className={workspace || index === 0 ? 'active' : ''} key={step}>
-              <em>{String(index + 1).padStart(2, '0')}</em>
-              {step}
+      <div className="act2-progress">
+        <div className="act2-progress-bar" />
+      </div>
+
+      <CampaignCard form={form} />
+
+      <div className="act2-grid">
+        <div className="act2-workspace">
+          <div className="act2-stage-line">
+            <span className="ind" />
+            <span className="act2-stage-label">{stageLabel}</span>
+            <span className="act2-stage-progress">
+              {doneCount} / {stageCount || '—'} complete
             </span>
-          ))}
-        </nav>
+          </div>
 
-        <div className="rail-note">
-          <strong>Safety model</strong>
-          <p>Read and simulation are safe. Execution is dry-run shaped and always creates PAUSED objects only.</p>
+          {streamError && (
+            <div className="act2-error">
+              <span>Stream error:</span> {streamError}
+            </div>
+          )}
+
+          <div style={{ marginTop: 28 }}>
+            <ToolCallStrip calls={toolCalls} />
+          </div>
+
+          <div className="act2-eyebrow" style={{ marginTop: 32 }}>
+            <span>EVIDENCE</span>
+            <span className="rule" aria-hidden="true" />
+            <span style={{ color: 'var(--gray-1)' }}>{evidence.length} collected</span>
+          </div>
+          <EvidencePanel items={evidence} />
         </div>
-      </aside>
 
-      <section className="workspace-main">
-        <header className="workspace-hero">
-          <div>
-            <p className="eyebrow">ADAUDIT / MEDIA BUYING WORKSPACE / V0.3</p>
-            <h1>Simulate the media buy before the agent spends.</h1>
-            <p className="hero-copy">
-              One API call runs evidence collection, media planning, budget economics, delivery checks, repair diff, and
-              paused execution prep. The timeline shows how each agent changes the next decision.
-            </p>
-          </div>
-          <div className="provider-card">
-            <span>POWERED BY</span>
-            <strong>{providerName(ai.baseUrl)}</strong>
-            <small>{ai.model || 'model pending'}</small>
-          </div>
-        </header>
+        <BriefPreview form={form} />
+      </div>
 
-        {error && <div className="error-banner">{error}</div>}
+      <div className="act1-actions" style={{ marginTop: 64 }}>
+        <button type="button" className="btn-ghost" onClick={onBack}>
+          ← Edit brief
+        </button>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--gray-1)',
+        }}>
+          Verdict drops in § 3
+        </span>
+      </div>
 
-        <section className="workspace-grid">
-          <motion.form
-            className="panel intake-panel"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            onSubmit={(e) => { e.preventDefault(); void analyze() }}
-          >
-            <PanelTitle label="Campaign Intake" detail="The real user entry point" />
+      <BrowserCameo session={browserCameo} />
+    </section>
+  )
+}
 
-            <Field label="Product">
-              <input value={intake.product} onChange={(e) => patch('product', e.target.value)} />
-            </Field>
-            <Field label="Product URL">
-              <input value={intake.product_url} onChange={(e) => patch('product_url', e.target.value)} />
-            </Field>
-            <div className="field-row">
-              <Field label="Platform">
-                <select value={intake.platform} onChange={(e) => patch('platform', e.target.value)}>
-                  <option>Meta</option>
-                  <option disabled>Google - next</option>
-                  <option disabled>TikTok - next</option>
-                </select>
-              </Field>
-              <Field label="Budget">
-                <input
-                  type="number"
-                  min={100}
-                  value={intake.budget_usd}
-                  onChange={(e) => patch('budget_usd', Number(e.target.value))}
-                />
-              </Field>
+// ---------- document footer ----------
+
+function DocFooter() {
+  const d = new Date()
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return (
+    <footer className="doc-footer">
+      <div className="doc-footer-rule" />
+      <div className="doc-footer-row">
+        <span>
+          AdAudit · Spec <strong>#{specId()}</strong> · Issued by gemini 2.5-flash
+        </span>
+        <span>{dateStr} · {time} UTC</span>
+        <span>1 of 1</span>
+      </div>
+    </footer>
+  )
+}
+
+// ---------- App orchestrator ----------
+
+function App() {
+  const [act, setAct] = useState<Act>('intake')
+  const [form, setForm] = useState<IntakeForm>(EMPTY_FORM)
+  // workspaceResult will drive Act 3 verdict (Phase 6); prefix-underscore until then
+  const [_workspaceResult, setWorkspaceResult] = useState<WorkspaceResult | null>(null)
+  void _workspaceResult
+
+  // derived: masthead pulses blue while the agent is working
+  const working = act === 'reviewing'
+
+  const handleSubmit = () => {
+    // Phase 2: just transition to reviewing. Real SSE driver arrives in Phase 3.
+    setAct('reviewing')
+  }
+
+  const specStatus = act === 'intake' ? 'DRAFT' : act === 'reviewing' ? 'IN REVIEW' : act === 'verdict' ? 'AWAITING APPROVAL' : act === 'revising' ? 'AMENDING' : 'PAUSED · APPROVED'
+
+  return (
+    <div className="shell">
+      <Masthead working={working} specStatus={specStatus} />
+
+      <main className="shell-main">
+        {act === 'intake' && (
+          <Act1Intake
+            form={form}
+            setForm={setForm}
+            onSubmit={handleSubmit}
+            onLoadSample={() => setForm(SAMPLE_FORM)}
+          />
+        )}
+
+        {act === 'reviewing' && (
+          <Act2Workspace
+            form={form}
+            onBack={() => setAct('intake')}
+            onWorkspaceDone={(w) => setWorkspaceResult(w)}
+          />
+        )}
+
+        {(act === 'verdict' || act === 'revising' || act === 'done') && (
+          <section className="act1" style={{ paddingTop: 80 }}>
+            <div className="act1-eyebrow">
+              <span className="section-num">§ {act === 'verdict' ? '3' : '4'} · PLACEHOLDER</span>
+              <span className="rule" aria-hidden="true" />
             </div>
-            <div className="field-row three">
-              <Field label="Target CPA">
-                <input
-                  type="number"
-                  min={0}
-                  value={intake.target_cpa}
-                  onChange={(e) => patch('target_cpa', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="AOV">
-                <input
-                  type="number"
-                  min={0}
-                  value={intake.aov}
-                  onChange={(e) => patch('aov', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Margin %">
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={intake.gross_margin}
-                  onChange={(e) => patch('gross_margin', Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <div className="field-row">
-              <Field label="Close rate %">
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={intake.lead_to_customer_rate}
-                  onChange={(e) => patch('lead_to_customer_rate', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="LTV">
-                <input
-                  type="number"
-                  min={0}
-                  value={intake.ltv}
-                  onChange={(e) => patch('ltv', Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <div className="field-row">
-              <Field label="Objective">
-                <select value={intake.objective} onChange={(e) => patch('objective', e.target.value)}>
-                  <option>Lead generation</option>
-                  <option>Traffic</option>
-                  <option>Purchases</option>
-                  <option>Demos</option>
-                  <option>Awareness</option>
-                </select>
-              </Field>
-              <Field label="Pixel status">
-                <select value={intake.pixel_status} onChange={(e) => patch('pixel_status', e.target.value)}>
-                  <option value="unknown">Unknown</option>
-                  <option value="missing">Missing</option>
-                  <option value="verified">Verified</option>
-                </select>
-              </Field>
-            </div>
-            <Field label="KPI priority">
-              <input
-                value={intake.kpi_priority.join(', ')}
-                onChange={(e) => patch('kpi_priority', e.target.value.split(',').map((v) => v.trim()).filter(Boolean))}
-              />
-            </Field>
-            <Field label="Audience">
-              <textarea value={intake.audience} onChange={(e) => patch('audience', e.target.value)} rows={3} />
-            </Field>
-            <Field label="Landing page evidence">
-              <textarea value={intake.landing_page} onChange={(e) => patch('landing_page', e.target.value)} rows={3} />
-            </Field>
-            <Field label="Assets and copy">
-              <textarea value={intake.assets} onChange={(e) => patch('assets', e.target.value)} rows={3} />
-            </Field>
-            <Field label="Competitors">
-              <input value={intake.competitors} onChange={(e) => patch('competitors', e.target.value)} />
-            </Field>
-            <Field label="Constraints">
-              <textarea value={intake.constraints} onChange={(e) => patch('constraints', e.target.value)} rows={3} />
-            </Field>
-
-            <div className="action-row">
-              <button className="primary-action" disabled={loading} type="submit">
-                {loading ? 'Simulating media buy...' : 'Build with live AI'}
-              </button>
-              <button className="ghost-action" disabled={loading} onClick={() => void analyze(true)} type="button">
-                Instant demo
-              </button>
-            </div>
-          </motion.form>
-
-          <section className="workspace-results">
-            <div className="decision-strip">
-              <div>
-                <span>FINAL RECOMMENDATION</span>
-                <strong className={statusClass(workspace?.final_decision.status)}>
-                  {formatStatus(workspace?.final_decision.status) || 'WAITING FOR INTAKE'}
-                </strong>
-                {analysisMode && <small>{analysisMode === 'live' ? 'Live AI analysis' : 'Instant playbook demo'}</small>}
-              </div>
-              <p>{workspace?.final_decision.summary || 'Run the workspace to compare campaign options and produce a paused execution spec.'}</p>
-            </div>
-
-            <div className="result-grid three">
-              {(workspace?.scenarios || placeholderScenarios).map((scenario) => (
-                <ScenarioCard scenario={scenario} key={scenario.id} active={scenario.id === workspace?.recommended_plan.scenario_id} />
-              ))}
-            </div>
-
-            <section className="panel timeline-panel">
-              <PanelTitle label="Agent Timeline" detail="Single-entry orchestration with visible causal chain" />
-              <div className="timeline-list">
-                {(workspace?.agent_timeline || placeholderTimeline).map((item, index) => (
-                  <motion.article
-                    className={`timeline-item ${statusClass(item.status)}`}
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: workspace ? index * 0.12 : 0 }}
-                    key={`${item.agent}-${index}`}
-                  >
-                    <div className="timeline-index">{String(index + 1).padStart(2, '0')}</div>
-                    <div>
-                      <header>
-                        <strong>{item.agent}</strong>
-                        <span>{formatStatus(item.status)}</span>
-                      </header>
-                      <p>{item.finding}</p>
-                      <small>{item.impact}</small>
-                      <em>affects: {item.affects.join(' -> ')}</em>
-                    </div>
-                  </motion.article>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel diff-panel">
-              <PanelTitle label="FIX_FIRST Before / After" detail={workspace?.plan_diff?.status || 'Plan repair diff appears after analysis'} />
-              <p className="diff-summary">
-                {workspace?.plan_diff?.summary || 'The Coordinator will show exactly what changed before the plan becomes READY_PAUSED.'}
-              </p>
-              <div className="diff-grid">
-                {(workspace?.plan_diff?.items || placeholderDiff.items).map((item) => (
-                  <article className="diff-card" key={item.field}>
-                    <span>{item.field}</span>
-                    <div className="diff-values">
-                      <strong className="before">{item.before}</strong>
-                      <b>→</b>
-                      <strong className="after">{item.after}</strong>
-                    </div>
-                    <p>{item.reason}</p>
-                  </article>
-                ))}
-              </div>
-              <div className="causal-checks">
-                {(workspace?.causal_checks || placeholderCausalChecks).map((check) => (
-                  <span className={check.passed ? 'good' : 'bad'} key={check.id}>
-                    {check.passed ? 'PASS' : 'FAIL'} / {check.detail}
-                  </span>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel strategy-console">
-              <PanelTitle label="Media Strategy Console" detail="Research, delivery, economics, and budget signal" />
-              <div className="strategy-grid">
-                {(workspace?.strategy_agents || placeholderStrategyAgents).map((agent) => (
-                  <article className={`strategy-card ${statusClass(agent.status)}`} key={agent.agent}>
-                    <div>
-                      <span>{agent.agent}</span>
-                      <em>{formatStatus(agent.status)}</em>
-                    </div>
-                    <strong>{agent.finding}</strong>
-                    <p>{agent.decision_impact}</p>
-                  </article>
-                ))}
-              </div>
-              <div className="strategy-diagnostics">
-                <DiagnosticCard
-                  title="Market Research"
-                  status="category"
-                  lines={[
-                    ...(workspace?.market_research?.category_patterns || ['Competitor and category evidence appears after analysis.']),
-                    ...(workspace?.market_research?.white_space || []),
-                    ...(workspace?.market_research?.landing_page_gaps || []),
-                  ].slice(0, 5)}
-                />
-                <DiagnosticCard
-                  title="Delivery Readiness"
-                  status={workspace?.delivery_readiness?.status || 'pending'}
-                  lines={(workspace?.delivery_readiness?.checks || []).map((check) => `${check.name}: ${check.reason}`)}
-                />
-                <DiagnosticCard
-                  title="Budget Signal"
-                  status={workspace?.budget_signal?.status || 'pending'}
-                  lines={[
-                    workspace?.budget_signal?.signal_density || 'Budget signal math appears after analysis.',
-                    workspace?.budget_signal?.learning_risk || '',
-                    workspace?.budget_signal?.recommended_ad_set_count
-                      ? `Recommended ad sets: ${workspace.budget_signal.recommended_ad_set_count}`
-                      : '',
-                  ].filter(Boolean)}
-                />
-                <DiagnosticCard
-                  title="Audience Strategy"
-                  status={workspace?.audience_strategy?.mode || 'pending'}
-                  lines={[
-                    workspace?.audience_strategy?.rationale || 'Audience strategy appears after analysis.',
-                    workspace?.audience_strategy?.control_tradeoff || '',
-                  ].filter(Boolean)}
-                />
-                <DiagnosticCard
-                  title="Unit Economics"
-                  status={workspace?.unit_economics?.confidence || workspace?.unit_economics?.status || 'pending'}
-                  lines={[
-                    `Target CPA: ${workspace?.unit_economics?.target_cpa || '-'}`,
-                    `Break-even CPA: ${workspace?.unit_economics?.break_even_cpa || '-'}`,
-                    `Break-even ROAS: ${workspace?.unit_economics?.break_even_roas || '-'}`,
-                    ...(workspace?.unit_economics?.assumptions || []),
-                  ]}
-                />
-              </div>
-            </section>
-
-            <div className="result-grid two">
-              <section className="panel">
-                <PanelTitle
-                  label="Evidence Board"
-                  detail={workspace?.evidence_artifacts ? `${workspace.evidence_artifacts.mode} / ${workspace.evidence_artifacts.job_id}` : 'What the agents used'}
-                />
-                <div className="stack">
-                  {(workspace?.evidence || placeholderEvidence).map((item, index) => (
-                    <article className="evidence-card" key={`${item.source}-${index}`}>
-                      <span>{item.source}</span>
-                      <strong>{item.finding}</strong>
-                      <p>{item.impact}</p>
-                    </article>
-                  ))}
-                  {(workspace?.evidence_artifacts?.artifacts || []).slice(0, 3).map((artifact) => (
-                    <article className="evidence-card artifact-card" key={`${artifact.type}-${artifact.uri}`}>
-                      <span>{artifact.type}</span>
-                      <strong>{artifact.label}</strong>
-                      <p>{artifact.summary}</p>
-                      <small>{artifact.source_url || artifact.uri}</small>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="panel">
-                <PanelTitle label="Creative Hypotheses" detail="Testable angles, not final assets" />
-                <div className="stack">
-                  {(workspace?.creative_hypotheses || placeholderHypotheses).map((item) => (
-                    <article className="hypothesis-card" key={item.name}>
-                      <div>
-                        <strong>{item.name}</strong>
-                        <span className={statusClass(item.risk)}>{item.risk}</span>
-                      </div>
-                      <p>{item.hook}</p>
-                      <small>{item.proof} / {item.success_metric}</small>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            <section className="panel recommendation-panel">
-              <PanelTitle label="Best Plan" detail={recommended ? recommended.name : 'No recommendation yet'} />
-              <div className="recommendation-grid">
-                <div>
-                  <h2>{workspace?.recommended_plan.campaign_name || 'Run analysis to generate a campaign spec'}</h2>
-                  <ul>
-                    {(workspace?.recommended_plan.why_this_wins || ['The recommended plan will explain why it is the cheapest viable test.']).map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="adset-list">
-                  {(workspace?.recommended_plan.ad_sets || []).map((adSet) => (
-                    <article key={adSet.name}>
-                      <strong>{adSet.name}</strong>
-                      <span>{money(adSet.budget_usd)} / {adSet.optimization_goal}</span>
-                      <p>{adSet.audience}</p>
-                      <small>{adSet.creative_hypothesis}</small>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <div className="result-grid two">
-              <section className="panel rule-panel">
-                <PanelTitle label="Kill / Hold / Scale Rules" detail="What the buyer will do after launch" />
-                <RuleColumn label="Kill" tone="bad" rules={workspace?.kill_scale_rules?.kill || ['Run analysis to generate spend-stop rules.']} />
-                <RuleColumn label="Hold" tone="warn" rules={workspace?.kill_scale_rules?.hold || ['Run analysis to generate waiting rules.']} />
-                <RuleColumn label="Scale" tone="good" rules={workspace?.kill_scale_rules?.scale || ['Run analysis to generate scale rules.']} />
-              </section>
-
-              <section className="panel monitoring-panel">
-                <PanelTitle label="72h Monitoring Plan" detail="Post-launch buyer loop" />
-                <div className="monitoring-list">
-                  {(workspace?.monitoring_plan_72h || placeholderMonitoring).map((window) => (
-                    <article key={window.window}>
-                      <strong>{window.window}</strong>
-                      <ul>
-                        {window.checks.map((check) => <li key={check}>{check}</li>)}
-                      </ul>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            <div className="result-grid two">
-              <section className="panel">
-                <PanelTitle label="Guardrail Review" detail="Five specialist checks" />
-                <div className="auditor-grid">
-                  {(workspace?.auditor_reviews || placeholderAuditors).map((review) => (
-                    <article className={`auditor-card ${statusClass(review.status)}`} key={review.auditor}>
-                      <span>{review.auditor}</span>
-                      <strong>{review.finding}</strong>
-                      <p>{review.mitigation}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="panel executor-panel">
-                <PanelTitle label="Paused Execution" detail="Dry-run shaped Meta output" />
-                <code>campaign.name = {workspace?.paused_execution_spec.campaign.name || '<pending>'}</code>
-                <code>campaign.objective = {workspace?.paused_execution_spec.campaign.objective || '<pending>'}</code>
-                <code>campaign.status = PAUSED</code>
-                <button
-                  className="secondary-action"
-                  disabled={!workspace || executing}
-                  onClick={() => void executePaused()}
-                  type="button"
-                >
-                  {executing ? 'Creating paused objects...' : 'Create paused campaign objects'}
-                </button>
-                {executor && (
-                  <div className="executor-output">
-                    <strong>campaign_id={executor.campaign_id}</strong>
-                    {executor.adset_ids.map((id) => <span key={id}>adset_id={id}</span>)}
-                    {executor.ad_ids.map((id) => <span key={id}>ad_id={id}</span>)}
-                    <em>status={executor.status}</em>
-                  </div>
-                )}
-                <p>
-                  {workspace?.paused_execution_spec.safety_notes?.join(' ') ||
-                    'Execution stays disabled until a plan has been simulated and reviewed.'}
-                </p>
-              </section>
-            </div>
+            <h1 className="act1-title">
+              {act === 'verdict' && 'Decision filed.'}
+              {act === 'revising' && 'Amending the spec.'}
+              {act === 'done' && 'Paused launch prepared.'}
+            </h1>
+            <p className="act1-subtitle">This act will be built in Phase 6+.</p>
+            <button type="button" className="btn-ghost" onClick={() => setAct('intake')}>
+              ← Return to intake
+            </button>
           </section>
-        </section>
-      </section>
-    </main>
-  )
-}
+        )}
+      </main>
 
-function PanelTitle({ label, detail }: { label: string; detail: string }) {
-  return (
-    <div className="panel-title">
-      <span>{label}</span>
-      <small>{detail}</small>
+      <DocFooter />
     </div>
   )
 }
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function ScenarioCard({ scenario, active }: { scenario: Scenario; active?: boolean }) {
-  return (
-    <article className={`scenario-card ${statusClass(scenario.verdict)} ${active ? 'selected' : ''}`}>
-      <div>
-        <span>{scenario.id}</span>
-        <em>{compactStatus(scenario.verdict)}</em>
-      </div>
-      <h3>{scenario.name}</h3>
-      <strong>{money(scenario.budget_usd)} / {scenario.objective}</strong>
-      <p>{scenario.structure}</p>
-      <small>{scenario.expected_signal}</small>
-      <dl>
-        {Object.entries(scenario.kpi_ranges || {}).map(([key, value]) => (
-          <div key={key}>
-            <dt>{key.toUpperCase()}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="scenario-reason">{scenario.reason}</p>
-    </article>
-  )
-}
-
-function DiagnosticCard({ title, status, lines }: { title: string; status: string; lines: string[] }) {
-  return (
-    <article className={`diagnostic-card ${statusClass(status)}`}>
-      <div>
-        <strong>{title}</strong>
-        <span>{formatStatus(status)}</span>
-      </div>
-      <ul>
-        {lines.filter(Boolean).slice(0, 5).map((line) => <li key={line}>{line}</li>)}
-      </ul>
-    </article>
-  )
-}
-
-function RuleColumn({ label, tone, rules }: { label: string; tone: string; rules: string[] }) {
-  return (
-    <div className={`rule-column ${tone}`}>
-      <strong>{label}</strong>
-      <ul>
-        {rules.map((rule) => <li key={rule}>{rule}</li>)}
-      </ul>
-    </div>
-  )
-}
-
-const placeholderScenarios: Scenario[] = [
-  {
-    id: 'validation',
-    name: 'Cheap validation test',
-    objective: 'TRAFFIC',
-    budget_usd: 0,
-    structure: 'Waiting for intake.',
-    expected_signal: 'Run analysis to estimate signal.',
-    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
-    risk: 'low',
-    verdict: 'pending',
-    reason: 'No simulation has run yet.',
-  },
-  {
-    id: 'balanced',
-    name: 'Balanced learning test',
-    objective: 'LEADS',
-    budget_usd: 0,
-    structure: 'Waiting for intake.',
-    expected_signal: 'Run analysis to estimate signal.',
-    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
-    risk: 'medium',
-    verdict: 'pending',
-    reason: 'No simulation has run yet.',
-  },
-  {
-    id: 'aggressive',
-    name: 'Aggressive conversion test',
-    objective: 'CONVERSIONS',
-    budget_usd: 0,
-    structure: 'Waiting for intake.',
-    expected_signal: 'Run analysis to estimate signal.',
-    kpi_ranges: { cpm: '-', ctr: '-', cpc: '-', cpa: '-' },
-    risk: 'high',
-    verdict: 'pending',
-    reason: 'No simulation has run yet.',
-  },
-]
-
-const placeholderEvidence: Evidence[] = [
-  { source: 'product', finding: 'No workspace analysis yet.', impact: 'The agent needs product, budget, audience, and asset context.' },
-]
-
-const placeholderHypotheses: Hypothesis[] = [
-  { name: 'Awaiting research', hook: 'Creative hypotheses appear after analysis.', emotion: '-', proof: '-', risk: 'neutral', success_metric: '-' },
-]
-
-const placeholderTimeline: AgentTimelineItem[] = [
-  {
-    agent: 'EvidenceAgent',
-    status: 'watch',
-    finding: 'Awaiting product URL, competitor context, and asset claims.',
-    impact: 'Evidence will feed planning before any recommendation is made.',
-    affects: ['MediaPlannerAgent'],
-  },
-  {
-    agent: 'MediaPlannerAgent',
-    status: 'watch',
-    finding: 'Awaiting evidence to generate three candidate plans.',
-    impact: 'The planner will create alternatives that can be rejected or repaired.',
-    affects: ['BudgetEconomicsAgent', 'DeliveryReadinessAgent'],
-  },
-  {
-    agent: 'BudgetEconomicsAgent',
-    status: 'watch',
-    finding: 'Awaiting budget and unit economics.',
-    impact: 'The ad set limit and kill/scale thresholds will constrain the final plan.',
-    affects: ['CoordinatorAgent'],
-  },
-]
-
-const placeholderDiff: PlanDiff = {
-  status: 'PENDING',
-  summary: 'No repair diff yet.',
-  items: [
-    {
-      field: 'Objective',
-      before: 'pending',
-      after: 'pending',
-      reason: 'Run analysis to see how the Coordinator repairs the plan.',
-    },
-  ],
-}
-
-const placeholderCausalChecks: CausalCheck[] = [
-  {
-    id: 'pending_causal_chain',
-    passed: false,
-    expected: 'workspace analysis',
-    actual: 'not run',
-    detail: 'Run analysis to validate the agent causal chain.',
-  },
-]
-
-const placeholderStrategyAgents: StrategyAgent[] = [
-  { agent: 'MarketResearchAgent', status: 'watch', finding: 'Awaiting product and competitor context.', decision_impact: 'The agent will map category patterns and whitespace.' },
-  { agent: 'BudgetSignalAgent', status: 'watch', finding: 'Awaiting budget and CPA target.', decision_impact: 'The agent will decide how many ad sets the budget can support.' },
-  { agent: 'UnitEconomicsAgent', status: 'watch', finding: 'Awaiting AOV, margin, LTV, or close-rate assumptions.', decision_impact: 'The agent will set kill and scale thresholds.' },
-]
-
-const placeholderAuditors: AuditorReview[] = [
-  { auditor: 'TrackingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
-  { auditor: 'AudienceAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
-  { auditor: 'BudgetAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
-  { auditor: 'PolicyAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
-  { auditor: 'CreativeLandingAuditor', status: 'warn', finding: 'Awaiting plan.', mitigation: 'Run analysis first.' },
-]
-
-const placeholderMonitoring: MonitoringWindow[] = [
-  { window: '0-24h', checks: ['Run analysis to generate the first-day monitoring loop.'] },
-  { window: '24-48h', checks: ['Run analysis to generate the second-day signal checks.'] },
-  { window: '48-72h', checks: ['Run analysis to generate kill/scale decisions.'] },
-]
 
 export default App
