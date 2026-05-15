@@ -2851,7 +2851,10 @@ button:disabled {
   font-family: var(--font-serif) !important;
   font-style: italic !important;
   font-weight: 500 !important;
-  font-variation-settings: "opsz" 144, "SOFT" 30, "WONK" 0 !important;
+  /* opsz=96 chosen for the 56-112px clamp: at 56px Fraunces stays readable,
+     at 112px it still feels display-grade. Going to 144 made small sizes
+     too heavy. */
+  font-variation-settings: "opsz" 96, "SOFT" 25, "WONK" 0 !important;
   font-size: clamp(56px, 9vw, 112px) !important;
   line-height: 0.96 !important;
   letter-spacing: -0.032em !important;
@@ -3039,6 +3042,181 @@ button:disabled {
   font-size: 54px;
   line-height: 0.95;
   letter-spacing: -0.04em;
+}
+
+/* ============================================================================
+   HERO VISION — compact Gemini Vision card occupying the Verdict hero right col.
+   Replaces the redundant Guardrails tile so first viewport shows Gemini work.
+   ============================================================================ */
+
+.aa-hero-vision {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset, 0 10px 36px rgba(15,23,42,0.06);
+  position: relative;
+}
+
+.aa-hero-vision-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aa-hero-vision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--signature);
+  color: #fff;
+}
+
+.aa-hero-vision-head small {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gray-1);
+}
+
+.aa-hero-vision-canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aa-hero-vision-canvas img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.aa-hero-vision-canvas.is-empty {
+  background:
+    repeating-linear-gradient(135deg, var(--surface-alt), var(--surface-alt) 6px, #fff 6px, #fff 12px);
+}
+
+.aa-hero-vision-noimg {
+  text-align: center;
+  padding: 10px;
+}
+
+.aa-hero-vision-noimg strong {
+  display: block;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.aa-hero-vision-noimg span {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-1);
+}
+
+.aa-hero-vision-mark {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--signature);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.25);
+  transform: translate(-50%, -50%);
+  animation: mark-pop var(--dur-ceremony) var(--ease) backwards;
+}
+
+.aa-hero-vision-mark i {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--signature);
+}
+
+.aa-hero-vision-mark.severity-high { border-color: var(--accent-risk); }
+.aa-hero-vision-mark.severity-high i { color: var(--accent-risk); }
+.aa-hero-vision-mark.severity-medium { border-color: var(--accent-warn); }
+.aa-hero-vision-mark.severity-medium i { color: var(--accent-warn); }
+.aa-hero-vision-mark.severity-low { border-color: var(--accent-ready); }
+.aa-hero-vision-mark.severity-low i { color: var(--accent-ready); }
+
+.aa-hero-vision-mark::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.3;
+  animation: mark-ring 2.2s var(--ease) infinite;
+}
+
+.aa-hero-vision-mark:nth-child(2) { animation-delay: 200ms; }
+
+.aa-hero-vision-line {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--gray-1);
+  margin: 0;
+  font-style: italic;
+}
+
+.aa-hero-vision-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  padding: 10px 0 2px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+  font-weight: 500;
+  width: 100%;
+}
+
+.aa-hero-vision-link:hover {
+  color: var(--signature);
+}
+
+.aa-hero-vision-link span {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .aa-scenario-grid {
