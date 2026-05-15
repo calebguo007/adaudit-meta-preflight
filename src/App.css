@@ -1979,49 +1979,40 @@ button:disabled {
   justify-self: start;
 }
 
-.aa-run-mode {
-  margin-top: 18px;
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 5px;
+/* aa-run-mode toggle retired (live-only system). Replaced with aa-run-note. */
+
+.aa-run-note {
+  margin-top: 20px;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 10px;
+  background: rgba(15, 44, 94, 0.04);
+  max-width: 640px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--gray-1);
 }
 
-.aa-run-mode button {
-  border: 0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  text-align: left;
-  cursor: pointer;
+.aa-run-note strong {
+  color: var(--ink);
+  font-weight: 600;
+  margin-right: 4px;
 }
 
-.aa-run-mode button small {
-  display: block;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: none;
-  color: var(--muted);
-}
-
-.aa-run-mode button.active {
-  background: var(--ink);
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(12, 20, 34, 0.16);
-}
-
-.aa-run-mode button.active small {
-  color: rgba(255, 255, 255, 0.72);
+.aa-run-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signature);
+  margin-top: 6px;
+  flex-shrink: 0;
+  animation: dot-breathe 1.6s var(--ease) infinite;
+  box-shadow: 0 0 0 3px rgba(15, 44, 94, 0.12);
 }
 
 .aa-primary,
@@ -3400,10 +3391,12 @@ button:disabled {
 
 .aa-agent-node strong {
   grid-column: 2;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  color: var(--ink);
 }
 
 .aa-agent-node p,
@@ -4036,6 +4029,146 @@ button:disabled {
     gap: 20px;
   }
   .aa-vision-review { padding: 20px 18px 24px; margin: 22px 0 12px; }
+}
+
+/* ============================================================================
+   RELIABILITY PANEL — consolidated "why this verdict is reliable" block.
+   Sits between Vision Review and the deep-dive grid. Five rows = 5 trust
+   sources behind the verdict. Lets a judge see the structural integrity
+   without scrolling into the full audit.
+   ============================================================================ */
+
+.aa-reliability {
+  margin: 28px 0 16px;
+  padding: 24px 28px 22px;
+  background:
+    linear-gradient(180deg, rgba(15, 44, 94, 0.04), transparent 70%),
+    #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset, 0 16px 60px rgba(15,23,42,0.05);
+}
+
+.aa-reliability-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.aa-reliability-head .aa-kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--signature);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.aa-reliability-head h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 96, "SOFT" 25, "WONK" 0;
+  font-weight: 500;
+  font-size: clamp(22px, 2.5vw, 28px);
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+}
+
+.aa-reliability-head small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-1);
+  text-align: right;
+  max-width: 28ch;
+  line-height: 1.5;
+}
+
+.aa-reliability-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aa-reliability-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 14px 0 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.aa-reliability-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.aa-reliability-n {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--signature);
+  padding-top: 3px;
+}
+
+.aa-reliability-body {
+  min-width: 0;
+}
+
+.aa-reliability-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.aa-reliability-top strong {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+
+.aa-reliability-top em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-ready);
+  text-align: right;
+}
+
+.aa-reliability-body p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--gray-1);
+  max-width: 70ch;
+}
+
+@media (max-width: 720px) {
+  .aa-reliability { padding: 18px 18px 16px; }
+  .aa-reliability-head { flex-direction: column; gap: 8px; }
+  .aa-reliability-head small { text-align: left; }
+  .aa-reliability-row { grid-template-columns: 38px minmax(0, 1fr); gap: 12px; }
 }
 
 .aa-diff-grid {

@@ -101,7 +101,9 @@ async function emitToolCall(res, call, result, delayMs = 650) {
   })
 }
 
-async function emitWorkspaceTrace(res, body, requestId, demoMode) {
+async function emitWorkspaceTrace(res, body, requestId, _demoMode) {
+  // Live-only pipeline. The demoMode parameter is kept for backward compat
+  // but ignored — every request runs real tools, with per-tool fallbacks.
   const product = body.product || 'AI Resume Optimizer'
   const budget = Number(body.budget_usd || body.budget || 500)
   const targetCpa = Number(body.target_cpa || 35)
@@ -114,8 +116,8 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
     ...body,
     product,
     product_url: body.product_url || undefined,
-    demo_mode: demoMode,
-    force_live_evidence: !demoMode,
+    demo_mode: false,
+    force_live_evidence: true,
   })
   const knowledgeContext = await retrieveKnowledgeContext({
     ...body,
@@ -125,7 +127,7 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
     target_cpa: targetCpa,
   })
   const firstArtifact = firstEvidenceArtifact(evidenceBundle)
-  const evidenceMode = evidenceBundle?.mode || (demoMode ? 'fixture' : 'unknown')
+  const evidenceMode = evidenceBundle?.mode || 'unknown'
   const evidenceFinding = firstEvidenceFinding(evidenceBundle)
   const evidenceSummary = firstArtifact?.summary || evidenceFinding
   const browserTitle = firstArtifact?.label || product
@@ -149,10 +151,10 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
             tool: 'browser.fetch',
             stage_id: 'evidence',
             summary: 'Open landing page and collect visible claims',
-            input: { url: productUrl, mode: demoMode ? 'fixture' : 'live_tools' },
+            input: { url: productUrl, mode: 'live_tools' },
           },
           result: {
-            output_summary: `${isLiveEvidence ? 'Live' : 'Fixture'} evidence collected via ${evidenceMode}.`,
+            output_summary: `${isLiveEvidence ? 'Live' : 'Fallback'} evidence collected via ${evidenceMode}.`,
             output_full: {
               title: browserTitle,
               mode: evidenceMode,
@@ -160,7 +162,7 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
               artifact: firstArtifact,
               notes: evidenceBundle?.notes || [],
             },
-            http_status: isLiveEvidence ? 200 : (demoMode ? 200 : undefined),
+            http_status: isLiveEvidence ? 200 : undefined,
             meta_extra: { evidence_mode: evidenceMode },
           },
           browser: {
@@ -411,12 +413,11 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
         })
       }
 
-      // After the fixture vision.analyze fires, if the marketer actually
-      // uploaded a creative AND we are in live mode AND Vertex is reachable,
-      // run the REAL Gemini Vision + Nano Banana pipeline. These are emitted
-      // as additional tool_call events plus two new event types the frontend
-      // consumes to override the heuristic markers.
-      if (item.call.tool === 'vision.analyze' && !demoMode && body.creative_data_url) {
+      // After the fixture vision.analyze fires, if the marketer uploaded a
+      // creative AND Vertex is reachable, run the REAL Gemini Vision + Nano
+      // Banana pipeline. Live-only — every request gets real multimodal
+      // analysis when a creative is present.
+      if (item.call.tool === 'vision.analyze' && body.creative_data_url) {
         await emitLiveVisionPipeline(res, body, requestId)
       }
 
@@ -636,21 +637,22 @@ async function handleApi(req, res) {
   // Canonical workspace trace stream for the v2 UI. This emits tool-call level
   // evidence before returning the same stable workspace used by /api/workspace/analyze.
   if (req.url?.startsWith('/api/workspace/stream') && req.method === 'POST') {
-    const parsedUrl = new URL(req.url, `http://localhost:${port}`)
     let body
     try { body = await readJson(req) } catch { return json(res, 400, { error: 'Invalid JSON' }) }
     const requestId = body.request_id || `wst_${Date.now().toString(36)}`
     body.request_id = requestId
-    const demoMode = parsedUrl.searchParams.get('demo_mode') === 'true' || body.demo_mode === true
-    body.demo_mode = demoMode
-    console.log(`[api:${requestId}] POST /api/workspace/stream demo_mode=${demoMode} provider=${aiInfo().provider}`)
+    // demo_mode retired: every request runs the live pipeline. Tool calls
+    // gracefully degrade if a provider (Playwright / Vision / Nano Banana)
+    // is unavailable so the trace always completes with real evidence.
+    body.demo_mode = false
+    console.log(`[api:${requestId}] POST /api/workspace/stream live provider=${aiInfo().provider}`)
 
     sseHeaders(res)
     res.write(': connected\n\n')
     sseSend(res, 'start', {
       request_id: requestId,
       endpoint_role: 'canonical_workspace_trace',
-      demo_mode: demoMode,
+      live: true,
       provider: aiInfo(),
       ts: new Date().toISOString(),
     })
@@ -660,7 +662,7 @@ async function handleApi(req, res) {
     }, 10000)
 
     try {
-      await emitWorkspaceTrace(res, body, requestId, demoMode)
+      await emitWorkspaceTrace(res, body, requestId, false)
       const workspace = await runMediaBuyingWorkspace(body)
       sseSend(res, 'workspace_done', {
         request_id: requestId,
