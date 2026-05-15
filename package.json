@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/index.mjs",
-    "test": "node server/unit-claim-risk.mjs && node server/unit-workspace-guardrails.mjs && node server/smoke-workspace.mjs",
+    "test": "node server/unit-claim-risk.mjs && node server/unit-knowledge.mjs && node server/unit-workspace-guardrails.mjs && node server/smoke-workspace.mjs",
     "install:playwright": "playwright install --with-deps chromium",
     "smoke:vertex": "node server/smoke-vertex.mjs",
     "start": "node server/index.mjs"

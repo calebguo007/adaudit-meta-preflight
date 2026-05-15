@@ -4,6 +4,7 @@ import { existsSync, createReadStream } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 
 import { aiInfo, callVertexVision, callNanoBananaAnnotate } from './ai.mjs'
+import { retrieveKnowledgeContext } from './knowledge.mjs'
 import {
   runAuditors,
   runCoordinator,
@@ -116,6 +117,13 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
     demo_mode: demoMode,
     force_live_evidence: !demoMode,
   })
+  const knowledgeContext = await retrieveKnowledgeContext({
+    ...body,
+    product,
+    claim: body.claim || body.assets,
+    budget_usd: budget,
+    target_cpa: targetCpa,
+  })
   const firstArtifact = firstEvidenceArtifact(evidenceBundle)
   const evidenceMode = evidenceBundle?.mode || (demoMode ? 'fixture' : 'unknown')
   const evidenceFinding = firstEvidenceFinding(evidenceBundle)
@@ -123,6 +131,12 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
   const browserTitle = firstArtifact?.label || product
   const browserUrl = firstArtifact?.source_url || firstArtifact?.uri || productUrl
   const isLiveEvidence = evidenceMode.startsWith('live')
+  const topKnowledge = knowledgeContext.selected?.[0]
+  const knowledgeSnippets = knowledgeContext.selected?.flatMap((pack) => pack.snippets.map((snippet) => ({
+    pack: pack.id,
+    title: pack.title,
+    snippet,
+  }))).slice(0, 8) || []
 
   const stages = [
     {
@@ -229,12 +243,26 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
             id: `${requestId}_kb`,
             tool: 'knowledge.search',
             stage_id: 'planner',
-            summary: 'Retrieve first-flight Meta planning rules',
-            input: { rules: ['learning phase', 'budget fragmentation', 'lead quality'] },
+            summary: 'Retrieve paid-media operating context',
+            input: {
+              query: knowledgeContext.query.slice(0, 500),
+              packs: knowledgeContext.selected.map((pack) => pack.id),
+            },
           },
           result: {
-            output_summary: 'Under $1000, the planner should avoid more than two ad sets.',
-            output_full: { rule: 'small budgets favor signal density over broad experimentation' },
+            output_summary: topKnowledge
+              ? `KnowledgeAgent selected ${knowledgeContext.selected.length} packs; top context: ${topKnowledge.title}.`
+              : 'KnowledgeAgent found default paid-media operating context.',
+            output_full: {
+              mode: knowledgeContext.mode,
+              selected_packs: knowledgeContext.selected.map((pack) => ({ id: pack.id, title: pack.title, score: pack.score })),
+              snippets: knowledgeSnippets,
+            },
+          },
+          evidence: {
+            source_type: 'knowledge_base',
+            finding: topKnowledge?.snippets?.[0] || 'Paid-media operating context retrieved for strategy reasoning.',
+            impact: 'Gemini and Coordinator receive platform, budget, creative, policy, and economics context before final plan repair.',
           },
         },
         {
@@ -423,6 +451,13 @@ async function emitLiveVisionPipeline(res, body, requestId) {
   const product = body.product || 'creative'
   const claim = body.claim || ''
   const audience = body.audience || ''
+  const visionKnowledge = await retrieveKnowledgeContext({
+    ...body,
+    product,
+    claim,
+    audience,
+    assets: body.creative_name || body.assets,
+  }, { limit: 4, snippetsPerSkill: 2 })
 
   // ---------- Step 1: real Gemini Vision ----------
   const visionId = `${requestId}_real_vision`
@@ -437,6 +472,7 @@ async function emitLiveVisionPipeline(res, body, requestId) {
       product,
       claim,
       audience,
+      knowledge_packs: visionKnowledge.selected.map((pack) => pack.id),
       mode: 'live_image',
     },
     ts: baseTs(),
@@ -445,17 +481,16 @@ async function emitLiveVisionPipeline(res, body, requestId) {
   let visionResult = null
   try {
     const system =
-      'You are a senior Meta media buyer reviewing an ad creative before launch. ' +
-      'Identify any policy-sensitive elements visible in the image: outcome promises, ' +
-      'time-bound guarantees, sensational claims, before/after framing, employment / ' +
-      'financial / health outcome language, urgency framing. Be precise: only flag what ' +
-      'is actually visible. If the image is unrelated to advertising (e.g. a generic UI ' +
-      'screenshot), say so and return empty findings.'
+      'You are a senior cross-platform paid media buyer reviewing an ad creative before launch. ' +
+      'Use the KnowledgeAgent snippets to judge platform fit, creative hypothesis, visual hierarchy, and policy-sensitive elements. ' +
+      'Identify visible outcome promises, time-bound guarantees, sensational claims, before/after framing, employment / financial / health outcome language, urgency framing, or misleading proof. ' +
+      'Be precise: only flag what is actually visible. Do not invent risks. If the image is unrelated to advertising, say so and return empty findings.'
 
     const user =
       `Product: ${product}\n` +
       `Stated claim: ${claim || '(none)'}\n` +
       `Audience: ${audience || '(unspecified)'}\n\n` +
+      `KnowledgeAgent snippets:\n${visionKnowledge.selected.map((pack) => `- ${pack.title}: ${pack.snippets.join(' | ')}`).join('\n')}\n\n` +
       `Return JSON in this exact schema:\n` +
       `{\n` +
       `  "summary": "<one-sentence description of what is visible in the image>",\n` +

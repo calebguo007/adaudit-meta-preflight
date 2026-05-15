@@ -9,6 +9,7 @@
 import { aiInfo, callAgent, streamAgent } from './ai.mjs'
 import { collectEvidence } from './evidence.mjs'
 import { hasClaimRewrite, pickOriginalRiskyClaim } from './claim-risk.mjs'
+import { formatKnowledgeForPrompt, retrieveKnowledgeContext } from './knowledge.mjs'
 
 // ----- shared output schema (for the prompts) -----
 
@@ -280,6 +281,10 @@ No prose outside the JSON.`
 
 const WORKSPACE_OVERLAY_SYSTEM = `You are AdAudit's Gemini strategy overlay.
 Return a short, plain-text strategy note that enriches a deterministic media-buying workspace.
+You are not a generic chat assistant. You are a paid-media strategist operating inside a guarded agent harness.
+Use the retrieved KnowledgeAgent snippets as operating context. Prefer specific platform, budget, policy, creative, and economics reasoning.
+If the snippets conflict with the user's desired launch, explain the safer test.
+Do not claim the campaign is safe to activate. Execution remains paused-only.
 Do not return JSON, markdown tables, or code fences.
 
 Format exactly four lines:
@@ -357,13 +362,21 @@ export async function runMediaBuyingWorkspace(intake) {
     demo_mode: intake?.demo_mode,
     force_live_evidence: intake?.force_live_evidence,
   })
+  const knowledgeContext = await retrieveKnowledgeContext({
+    ...normalized,
+    claim: intake?.claim || normalized.assets,
+    competitor_urls: intake?.competitor_urls,
+    creative_name: intake?.creative_name,
+  })
   console.log(`[workspace:${requestId}] evidence mode=${evidenceBundle?.mode || 'unknown'} artifacts=${evidenceBundle?.artifacts?.length || 0}`)
+  console.log(`[workspace:${requestId}] knowledge packs=${knowledgeContext.selected.map((item) => item.id).join(',')}`)
   if (intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true') {
     const workspace = fallbackWorkspace(normalized, evidenceBundle, {
       requestId,
       startedAt,
       source: 'fixture',
       mode,
+      knowledgeContext,
     })
     console.log(`[workspace:${requestId}] fixture complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
     return workspace
@@ -376,6 +389,7 @@ export async function runMediaBuyingWorkspace(intake) {
       startedAt,
       source: 'deterministic-base',
       mode,
+      knowledgeContext,
     })
     const overlayText = await callAgent({
       system: WORKSPACE_OVERLAY_SYSTEM,
@@ -383,7 +397,7 @@ export async function runMediaBuyingWorkspace(intake) {
         final_decision: baseWorkspace.final_decision,
         recommended_plan: baseWorkspace.recommended_plan,
         causal_checks: baseWorkspace.causal_checks,
-      }, null, 2)}`,
+      }, null, 2)}\n\nKnowledgeAgent retrieved operating context:\n${formatKnowledgeForPrompt(knowledgeContext)}`,
       json: false,
       maxTokens: 450,
     })
@@ -394,6 +408,7 @@ export async function runMediaBuyingWorkspace(intake) {
       startedAt,
       source: 'vertex-ai-text-overlay',
       mode,
+      knowledgeContext,
     })
     console.log(`[workspace:${requestId}] ai_overlay success decision=${workspace.final_decision?.status} checks=${workspace.causal_checks?.filter((check) => check.passed).length || 0}/${workspace.causal_checks?.length || 0} duration_ms=${Date.now() - startedAt}`)
     return workspace
@@ -405,6 +420,7 @@ export async function runMediaBuyingWorkspace(intake) {
       source: 'fallback-after-ai-error',
       mode,
       fallbackReason: err?.message || String(err),
+      knowledgeContext,
     })
     console.log(`[workspace:${requestId}] fallback complete decision=${workspace.final_decision?.status} duration_ms=${Date.now() - startedAt}`)
     return workspace
@@ -540,7 +556,7 @@ function normalizeIntake(intake = {}) {
     product: String(intake.product || 'AI resume optimizer'),
     product_url: productUrl,
     landing_page: landingPage,
-    platform: 'Meta',
+    platform: String(intake.platform || 'Meta'),
     budget_usd: Number.isFinite(budget) ? budget : 500,
     target_cpa: Number.isFinite(targetCpa) && targetCpa > 0 ? targetCpa : null,
     aov: Number.isFinite(aov) && aov > 0 ? aov : null,
@@ -579,7 +595,7 @@ function fallbackWorkspace(intake, evidenceBundle, meta = {}) {
   const workspace = {
     intake_summary: {
       product: intake.product,
-      platform: 'Meta',
+      platform: intake.platform || 'Meta',
       budget_usd: budget,
       objective: intake.objective,
       kpi_priority: intake.kpi_priority,
@@ -956,6 +972,17 @@ export function completeWorkspace(intake, rawWorkspace, evidenceBundle, override
   workspace.budget_economics.ad_set_limit = budgetAdSetLimit
   workspace.budget_economics.target_cpa = workspace.unit_economics?.target_cpa || (intake.target_cpa ? moneyText(intake.target_cpa) : 'unknown')
   workspace.budget_economics.break_even_cpa = workspace.unit_economics?.break_even_cpa || 'unknown'
+  if (overrides.knowledgeContext) {
+    workspace.knowledge_context = overrides.knowledgeContext
+    const topPack = overrides.knowledgeContext.selected?.[0]
+    if (topPack && Array.isArray(workspace.evidence) && !workspace.evidence.some((item) => item.source === 'KnowledgeAgent')) {
+      workspace.evidence.unshift({
+        source: 'KnowledgeAgent',
+        finding: `Retrieved ${overrides.knowledgeContext.selected.length} paid-media operating packs; top pack: ${topPack.title}.`,
+        impact: 'Gemini strategy reasoning is grounded in platform, budget, policy, creative, and economics snippets instead of a naked prompt.',
+      })
+    }
+  }
 
   workspace.agent_timeline = buildAgentTimeline({
     workspace,
@@ -990,6 +1017,7 @@ export function completeWorkspace(intake, rawWorkspace, evidenceBundle, override
     fallback_reason: overrides.fallbackReason || null,
     ai: provider,
     evidence_mode: workspace.evidence_artifacts?.mode || evidenceBundle?.mode || 'unknown',
+    knowledge_packs: workspace.knowledge_context?.selected?.map((item) => item.id) || [],
     causal_checks: {
       passed: passCount,
       total: workspace.causal_checks.length,
