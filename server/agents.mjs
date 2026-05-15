@@ -350,7 +350,12 @@ export async function runMediaBuyingWorkspace(intake) {
   const requestId = intake?.request_id || `ws_${Date.now().toString(36)}`
   const mode = intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true' ? 'fixture' : 'live'
   console.log(`[workspace:${requestId}] start mode=${mode} product="${normalized.product}" budget=${normalized.budget_usd}`)
-  const evidenceBundle = await collectEvidence({ ...normalized, demo_mode: intake?.demo_mode })
+  const evidenceBundle = await collectEvidence({
+    ...normalized,
+    product_url: intake?.product_url || normalized.product_url,
+    demo_mode: intake?.demo_mode,
+    force_live_evidence: intake?.force_live_evidence,
+  })
   console.log(`[workspace:${requestId}] evidence mode=${evidenceBundle?.mode || 'unknown'} artifacts=${evidenceBundle?.artifacts?.length || 0}`)
   if (intake?.demo_mode || process.env.ADAUDIT_FAST_WORKSPACE === 'true') {
     const workspace = fallbackWorkspace(normalized, evidenceBundle, {
@@ -526,12 +531,14 @@ function normalizeIntake(intake = {}) {
   const ltv = Number(intake.ltv || intake.customer_ltv || 0)
   const rawLeadToCustomerRate = Number(intake.lead_to_customer_rate || intake.close_rate || 0)
   const rawMargin = Number(intake.gross_margin || intake.margin || 0)
+  const landingPage = String(intake.landing_page || intake.landing_page_notes || '')
+  const productUrl = String(intake.product_url || (/^https?:\/\//i.test(landingPage.trim()) ? landingPage.trim() : ''))
   const grossMargin = rawMargin > 1 ? rawMargin / 100 : rawMargin
   const leadToCustomerRate = rawLeadToCustomerRate > 1 ? rawLeadToCustomerRate / 100 : rawLeadToCustomerRate
   return {
     product: String(intake.product || 'AI resume optimizer'),
-    product_url: String(intake.product_url || ''),
-    landing_page: String(intake.landing_page || intake.landing_page_notes || ''),
+    product_url: productUrl,
+    landing_page: landingPage,
     platform: 'Meta',
     budget_usd: Number.isFinite(budget) ? budget : 500,
     target_cpa: Number.isFinite(targetCpa) && targetCpa > 0 ? targetCpa : null,
@@ -1154,7 +1161,7 @@ function hasClaimRewrite(planDiff) {
     const before = String(item?.before || '')
     const after = String(item?.after || '')
     const fieldIsClaim = /claim|hook|copy|message/i.test(field)
-    const beforeLooksRisky = /guarantee|guaranteed|land a job|7 days|seven days|outcome promise/i.test(before)
+    const beforeLooksRisky = /guarantee|guaranteed|land a job|7 days|seven days|outcome promise|time-bound|employment outcome/i.test(before)
     const afterLooksSafe = /proof|diagnosis|diagnostic|audit|score|hidden|resume issue|resume issues|readiness|checklist/i.test(after)
     return fieldIsClaim && beforeLooksRisky && afterLooksSafe
   })

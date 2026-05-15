@@ -62,6 +62,20 @@ function byteSize(value) {
   return Buffer.byteLength(JSON.stringify(value ?? {}), 'utf8')
 }
 
+function firstEvidenceArtifact(bundle) {
+  return Array.isArray(bundle?.artifacts) && bundle.artifacts.length ? bundle.artifacts[0] : null
+}
+
+function firstEvidenceFinding(bundle) {
+  const structured = bundle?.structured_evidence || {}
+  return (
+    structured.page_claims?.find(Boolean) ||
+    structured.risky_claims?.find(Boolean) ||
+    firstEvidenceArtifact(bundle)?.summary ||
+    'Evidence collected for media-planning context.'
+  )
+}
+
 async function emitToolCall(res, call, result, delayMs = 650) {
   const startedAt = Date.now()
   const ts = new Date().toISOString()
@@ -94,7 +108,21 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
   const perAdSetBudget = Math.round(budget / adSetLimit)
   const minClicks = Math.round(budget / 3)
   const maxClicks = Math.round(budget / 1.5)
-  const productUrl = body.product_url || 'fixture://ai-resume-optimizer'
+  const productUrl = body.product_url || body.landing_page || 'fixture://ai-resume-optimizer'
+  const evidenceBundle = await collectEvidence({
+    ...body,
+    product,
+    product_url: body.product_url || undefined,
+    demo_mode: demoMode,
+    force_live_evidence: !demoMode,
+  })
+  const firstArtifact = firstEvidenceArtifact(evidenceBundle)
+  const evidenceMode = evidenceBundle?.mode || (demoMode ? 'fixture' : 'unknown')
+  const evidenceFinding = firstEvidenceFinding(evidenceBundle)
+  const evidenceSummary = firstArtifact?.summary || evidenceFinding
+  const browserTitle = firstArtifact?.label || product
+  const browserUrl = firstArtifact?.source_url || firstArtifact?.uri || productUrl
+  const isLiveEvidence = evidenceMode.startsWith('live')
 
   const stages = [
     {
@@ -107,26 +135,52 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
             tool: 'browser.fetch',
             stage_id: 'evidence',
             summary: 'Open landing page and collect visible claims',
-            input: { url: productUrl, mode: demoMode ? 'fixture' : 'live_or_fixture' },
+            input: { url: productUrl, mode: demoMode ? 'fixture' : 'live_tools' },
           },
           result: {
-            output_summary: 'Landing page evidence collected; risky employment promise detected in draft asset.',
-            output_full: { title: product, claims: ['ATS readiness', 'resume audit', 'land a job in 7 days draft risk'] },
-            http_status: demoMode ? 200 : undefined,
-            meta_extra: { evidence_mode: process.env.ADAUDIT_DISABLE_LIVE_EVIDENCE === 'true' ? 'fixture' : 'live' },
+            output_summary: `${isLiveEvidence ? 'Live' : 'Fixture'} evidence collected via ${evidenceMode}.`,
+            output_full: {
+              title: browserTitle,
+              mode: evidenceMode,
+              claims: evidenceBundle?.structured_evidence?.page_claims || [],
+              artifact: firstArtifact,
+              notes: evidenceBundle?.notes || [],
+            },
+            http_status: isLiveEvidence ? 200 : (demoMode ? 200 : undefined),
+            meta_extra: { evidence_mode: evidenceMode },
           },
           browser: {
-            url: productUrl,
-            title: product,
-            highlighted_text: 'Get my resume audit; land a job in 7 days draft claim requires rewrite.',
+            url: browserUrl,
+            title: browserTitle,
+            highlighted_text: evidenceSummary,
+          },
+          evidence: {
+            source_type: isLiveEvidence ? 'playwright' : 'knowledge_base',
+            source_url: browserUrl,
+            finding: evidenceFinding,
+            impact: `Evidence mode ${evidenceMode} routes creative strategy before launch.`,
+          },
+        },
+        ...(firstArtifact?.type === 'browser_capture' ? [{
+          call: {
+            id: `${requestId}_screenshot`,
+            tool: 'browser.screenshot',
+            stage_id: 'evidence',
+            summary: 'Persist above-the-fold screenshot evidence',
+            input: { source_url: firstArtifact.source_url, artifact_uri: firstArtifact.uri },
+          },
+          result: {
+            output_summary: 'Screenshot artifact saved for audit review.',
+            output_full: { uri: firstArtifact.uri, text_uri: firstArtifact.text_uri, source_url: firstArtifact.source_url },
+            meta_extra: { evidence_mode: evidenceMode },
           },
           evidence: {
             source_type: 'playwright',
-            source_url: productUrl,
-            finding: 'Landing-page and asset evidence suggest proof-first resume audit language is safer than outcome guarantees.',
-            impact: 'Routes creative strategy toward diagnosis/proof language before launch.',
+            source_url: firstArtifact.source_url,
+            finding: 'A browser screenshot artifact is available for audit and Gemini review.',
+            impact: 'Turns landing-page review into inspectable evidence instead of pure prompt text.',
           },
-        },
+        }] : []),
         {
           call: {
             id: `${requestId}_competitor`,

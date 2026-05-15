@@ -9,12 +9,15 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/index.mjs",
+    "test": "node server/smoke-workspace.mjs",
+    "install:playwright": "playwright install --with-deps chromium",
     "smoke:vertex": "node server/smoke-vertex.mjs",
     "start": "node server/index.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.2.0",
     "framer-motion": "^12.38.0",
+    "playwright": "^1.60.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

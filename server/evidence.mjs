@@ -9,7 +9,8 @@ export async function collectEvidence(input = {}) {
   const artifactDir = join(ARTIFACT_ROOT, jobId)
 
   const fixture = buildEvidenceFixture(normalized, jobId)
-  if (normalized.demo_mode || process.env.ADAUDIT_DISABLE_LIVE_EVIDENCE === 'true') {
+  const liveDisabled = process.env.ADAUDIT_DISABLE_LIVE_EVIDENCE === 'true' && !normalized.force_live_evidence
+  if (normalized.demo_mode || liveDisabled) {
     return fixture
   }
 
@@ -36,6 +37,8 @@ export async function collectEvidence(input = {}) {
 }
 
 function normalizeEvidenceInput(input) {
+  const landingPage = String(input.landing_page || input.landing_page_notes || '')
+  const productUrl = String(input.product_url || (/^https?:\/\//i.test(landingPage.trim()) ? landingPage.trim() : ''))
   const competitorUrls = Array.isArray(input.competitor_urls)
     ? input.competitor_urls
     : String(input.competitor_urls || input.competitors || '')
@@ -45,9 +48,10 @@ function normalizeEvidenceInput(input) {
 
   return {
     demo_mode: Boolean(input.demo_mode),
+    force_live_evidence: Boolean(input.force_live_evidence),
     product: String(input.product || 'AI Resume Optimizer'),
-    product_url: String(input.product_url || ''),
-    landing_page: String(input.landing_page || input.landing_page_notes || ''),
+    product_url: productUrl,
+    landing_page: landingPage,
     assets: String(input.assets || ''),
     competitors: String(input.competitors || ''),
     competitor_urls: competitorUrls,
@@ -104,7 +108,12 @@ async function collectLivePageEvidence(input, jobId, artifactDir) {
     throw new Error('No product_url or competitor_urls supplied')
   }
 
-  const playwright = await import('playwright')
+  let playwright
+  try {
+    playwright = await import('playwright')
+  } catch (error) {
+    return collectLiveFetchEvidence(input, jobId, error)
+  }
   const browser = await playwright.chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
@@ -150,6 +159,64 @@ async function collectLivePageEvidence(input, jobId, artifactDir) {
     claims: [...new Set(claims)].slice(0, 5),
     landingPageGaps,
     notes: ['Live Playwright collection completed in the backend orchestration path.'],
+  }
+}
+
+async function collectLiveFetchEvidence(input, jobId, importError) {
+  const pages = [
+    { role: 'product', url: input.product_url },
+    ...input.competitor_urls.slice(0, 2).map((url, index) => ({ role: `competitor_${index + 1}`, url })),
+  ].filter((page) => page.url)
+
+  if (!pages.length) {
+    throw new Error('No product_url or competitor_urls supplied')
+  }
+
+  const artifacts = []
+  const claims = []
+  const landingPageGaps = []
+
+  for (const pageTarget of pages) {
+    const response = await fetch(pageTarget.url, {
+      headers: {
+        'user-agent': 'AdAudit evidence collector (+https://github.com/calebguo007/adaudit-meta-preflight)',
+        accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!response.ok) throw new Error(`Fetch failed for ${pageTarget.url}: ${response.status}`)
+    const html = await response.text()
+    const bodyText = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 2200)
+
+    artifacts.push({
+      type: 'browser_fetch',
+      label: `${pageTarget.role}: ${pageTarget.url}`,
+      uri: pageTarget.url,
+      source_url: pageTarget.url,
+      summary: bodyText.slice(0, 240),
+    })
+    claims.push(...extractClaims(bodyText))
+    if (pageTarget.role === 'product' && !/proof|score|audit|case|testimonial|review/i.test(bodyText)) {
+      landingPageGaps.push('The fetched product page does not expose an obvious proof artifact in the extracted text.')
+    }
+  }
+
+  return {
+    job_id: jobId,
+    mode: 'live_fetch',
+    artifacts,
+    claims: [...new Set(claims)].slice(0, 5),
+    landingPageGaps,
+    notes: [
+      'Live HTTP evidence collection completed.',
+      `Playwright browser capture was unavailable: ${importError.message}.`,
+    ],
   }
 }
 

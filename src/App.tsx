@@ -17,6 +17,8 @@ type IntakeForm = {
   creativeName?: string
 }
 
+type RunMode = 'demo' | 'live'
+
 type ToolCall = {
   id: string
   tool: string
@@ -179,6 +181,7 @@ function planDiffItems(workspace: WorkspaceResult | null) {
 
 async function streamWorkspace(
   intake: Record<string, unknown>,
+  mode: RunMode,
   signal: AbortSignal,
   handlers: {
     onStageStart: (stage: { stage_id: string; label?: string }) => void
@@ -192,10 +195,11 @@ async function streamWorkspace(
     onError: (message: string) => void
   },
 ) {
-  const res = await fetch('/api/workspace/stream?demo_mode=true', {
+  const demoMode = mode === 'demo'
+  const res = await fetch(`/api/workspace/stream?demo_mode=${demoMode ? 'true' : 'false'}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...intake, demo_mode: true }),
+    body: JSON.stringify({ ...intake, demo_mode: demoMode, force_live_evidence: !demoMode }),
     signal,
   })
 
@@ -340,7 +344,19 @@ function Metric({ label, value, detail, tone }: { label: string; value: string; 
   )
 }
 
-function Intake({ form, setForm, onRun }: { form: IntakeForm; setForm: (form: IntakeForm) => void; onRun: () => void }) {
+function Intake({
+  form,
+  setForm,
+  runMode,
+  setRunMode,
+  onRun,
+}: {
+  form: IntakeForm
+  setForm: (form: IntakeForm) => void
+  runMode: RunMode
+  setRunMode: (mode: RunMode) => void
+  onRun: () => void
+}) {
   const budget = parseBudget(form)
   const claimRisk = getClaimRisk(form.claim)
   const canRun = form.product.trim() && budget > 0
@@ -365,6 +381,16 @@ function Intake({ form, setForm, onRun }: { form: IntakeForm; setForm: (form: In
         <div className="aa-actions">
           <button className="aa-primary" type="button" disabled={!canRun} onClick={onRun}>Run guarded media plan</button>
           <button className="aa-secondary" type="button" onClick={() => setForm(SAMPLE_FORM)}>Load risky demo brief</button>
+        </div>
+        <div className="aa-run-mode" role="group" aria-label="Execution mode">
+          <button type="button" className={runMode === 'demo' ? 'active' : ''} onClick={() => setRunMode('demo')}>
+            Demo trace
+            <small>stable recording path</small>
+          </button>
+          <button type="button" className={runMode === 'live' ? 'active' : ''} onClick={() => setRunMode('live')}>
+            Live tools
+            <small>browser fetch + Vertex AI</small>
+          </button>
         </div>
       </section>
 
@@ -439,6 +465,7 @@ function Vital({ label, value, text, risk }: { label: string; value: number; tex
 
 function Review({
   form,
+  runMode,
   toolCalls,
   evidence,
   browserSession,
@@ -446,6 +473,7 @@ function Review({
   streamError,
 }: {
   form: IntakeForm
+  runMode: RunMode
   toolCalls: ToolCall[]
   evidence: EvidenceItem[]
   browserSession: BrowserSession | null
@@ -462,6 +490,10 @@ function Review({
           <div className="aa-kicker">Live workspace trace</div>
           <h1>Building the safest viable Meta test.</h1>
           <p>{stageLabel}</p>
+          <div className={`aa-mode-pill mode-${runMode}`}>
+            {runMode === 'live' ? 'LIVE TOOLS ENABLED' : 'DEMO TRACE'}
+            <small>{runMode === 'live' ? 'real evidence attempt, fixture fallback marked' : 'fixed trace for video timing'}</small>
+          </div>
         </div>
         <div className="aa-review-score">
           <strong>{done}/{toolCalls.length || 9}</strong>
@@ -712,6 +744,7 @@ function SkeletonRows() {
 function App() {
   const [act, setAct] = useState<Act>('intake')
   const [form, setForm] = useState<IntakeForm>(SAMPLE_FORM)
+  const [runMode, setRunMode] = useState<RunMode>('demo')
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
   const [evidence, setEvidence] = useState<EvidenceItem[]>([])
   const [browserSession, setBrowserSession] = useState<BrowserSession | null>(null)
@@ -728,6 +761,9 @@ function App() {
     audience: form.audience,
     claim: form.claim,
     landing_page: form.landingPage,
+    product_url: /^https?:\/\//i.test(form.landingPage.trim()) ? form.landingPage.trim() : undefined,
+    assets: form.claim,
+    creative_name: form.creativeName,
     target_cpa: Number(form.targetCpa || 0) || undefined,
     aov: Number(form.aov || 0) || undefined,
     gross_margin: Number(form.margin || 0) || undefined,
@@ -750,7 +786,7 @@ function App() {
     const runId = currentRun.current
     const ctrl = new AbortController()
 
-    streamWorkspace(intakePayload, ctrl.signal, {
+    streamWorkspace(intakePayload, runMode, ctrl.signal, {
       onStageStart: ({ label, stage_id }) => setStageLabel(label || stage_id || 'Working'),
       onToolStart: (call) => setToolCalls((prev) => [...prev, call]),
       onToolDone: (id, patch) => setToolCalls((prev) => prev.map((call) => call.id === id ? { ...call, ...patch } : call)),
@@ -772,7 +808,7 @@ function App() {
     })
 
     return () => ctrl.abort()
-  }, [act, intakePayload])
+  }, [act, intakePayload, runMode])
 
   const executePaused = async () => {
     setExecuting(true)
@@ -801,10 +837,11 @@ function App() {
   return (
     <div className="aa-shell">
       <Masthead act={act} workspace={workspace} />
-      {act === 'intake' && <Intake form={form} setForm={setForm} onRun={runAudit} />}
+      {act === 'intake' && <Intake form={form} setForm={setForm} runMode={runMode} setRunMode={setRunMode} onRun={runAudit} />}
       {act === 'reviewing' && (
         <Review
           form={form}
+          runMode={runMode}
           toolCalls={toolCalls}
           evidence={evidence}
           browserSession={browserSession}
