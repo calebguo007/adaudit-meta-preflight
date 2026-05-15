@@ -37,6 +37,10 @@ const GOOGLE_PROJECT = process.env.GOOGLE_CLOUD_PROJECT || ''
 const GOOGLE_LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'global'
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
+// Image generation / editing model — known as "Nano Banana" in Google branding.
+// Used for visible annotation of the uploaded creative (image-in, image-out).
+const NANO_BANANA_MODEL = process.env.NANO_BANANA_MODEL || 'gemini-2.5-flash-image'
+
 let vertexClient
 
 if (!USE_VERTEX && !API_KEY) {
@@ -92,6 +96,131 @@ function jsonInstruction(json) {
   return json
     ? '\n\nReturn only valid JSON. Do not wrap it in markdown fences. Do not add commentary.'
     : ''
+}
+
+// Strip a data URL prefix and return { mimeType, base64 }. Accepts either a
+// raw base64 string or a "data:image/jpeg;base64,..." form.
+function parseDataUrl(input) {
+  if (!input || typeof input !== 'string') return null
+  const m = input.match(/^data:([^;]+);base64,(.+)$/)
+  if (m) return { mimeType: m[1], base64: m[2] }
+  // assume plain base64, default to jpeg
+  return { mimeType: 'image/jpeg', base64: input }
+}
+
+/**
+ * Multimodal Vision call: gives Gemini 2.5 Flash an image + a prompt.
+ * Used by /api/workspace/stream when the marketer uploads a creative.
+ * Returns parsed JSON when json=true.
+ */
+export async function callVertexVision({
+  system,
+  user,
+  image,
+  json = false,
+  temperature = 0.2,
+  maxTokens = 700,
+}) {
+  if (!USE_VERTEX) {
+    throw new Error('callVertexVision requires GOOGLE_GENAI_USE_VERTEXAI=true')
+  }
+  const decoded = parseDataUrl(image?.data_url || image?.base64 || image)
+  if (!decoded) throw new Error('callVertexVision: image data required')
+
+  const client = getVertexClient()
+  const promptText = `${system || ''}\n\n${user || ''}${jsonInstruction(json)}`.trim()
+
+  const response = await client.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: decoded.mimeType, data: decoded.base64 } },
+          { text: promptText },
+        ],
+      },
+    ],
+    config: {
+      temperature,
+      maxOutputTokens: maxTokens,
+      responseMimeType: json ? 'application/json' : 'text/plain',
+    },
+  })
+
+  const content = response.text || ''
+  if (json) {
+    const preview = content.replace(/\s+/g, ' ').slice(0, 500)
+    console.log(`[ai:vision] model=${GEMINI_MODEL} chars=${content.length} preview="${preview}"`)
+    const parsed = parseJsonContent(content)
+    if (!parsed) throw new Error(`Vertex vision JSON parse failed: ${preview}`)
+    return parsed
+  }
+  return content
+}
+
+/**
+ * Nano Banana annotation: image-in, image-out. Asks gemini-2.5-flash-image to
+ * draw editorial annotations (numbered circles, light highlights) directly on
+ * the uploaded creative based on the findings from the Vision step.
+ *
+ * Returns { mimeType, base64 } of the annotated image, or null on failure
+ * (caller should fall back to coord-based markers).
+ */
+export async function callNanoBananaAnnotate({
+  image,
+  findings,
+  prompt,
+  temperature = 0.3,
+}) {
+  if (!USE_VERTEX) {
+    throw new Error('callNanoBananaAnnotate requires GOOGLE_GENAI_USE_VERTEXAI=true')
+  }
+  const decoded = parseDataUrl(image?.data_url || image?.base64 || image)
+  if (!decoded) throw new Error('callNanoBananaAnnotate: image data required')
+
+  const client = getVertexClient()
+  const findingsBullets = Array.isArray(findings) && findings.length
+    ? findings.map((f, i) => `${i + 1}. ${f.label || f.text || JSON.stringify(f)}${f.severity ? ` (${f.severity})` : ''}`).join('\n')
+    : '(no specific findings — annotate any visible headline, CTA, and proof element)'
+
+  const editPrompt =
+    prompt ||
+    `Add concise editorial annotations to this ad creative as if a senior media buyer is reviewing it. ` +
+    `For each of the items below, draw a small numbered circle in red (or amber for medium severity, green for low) over the relevant region of the image. ` +
+    `Do not redraw the underlying creative. Preserve the original composition. ` +
+    `Findings to mark:\n${findingsBullets}\n\n` +
+    `Output: the same image with the small numbered circles overlaid in the correct positions. No text overlays beyond the small numbers inside the circles.`
+
+  const response = await client.models.generateContent({
+    model: NANO_BANANA_MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: decoded.mimeType, data: decoded.base64 } },
+          { text: editPrompt },
+        ],
+      },
+    ],
+    config: {
+      temperature,
+      responseModalities: ['IMAGE'],
+    },
+  })
+
+  const parts = response?.candidates?.[0]?.content?.parts || []
+  for (const part of parts) {
+    const inline = part.inlineData || part.inline_data
+    if (inline?.data) {
+      return {
+        mimeType: inline.mimeType || inline.mime_type || 'image/png',
+        base64: inline.data,
+      }
+    }
+  }
+  console.warn(`[ai:nano-banana] no image in response. text fallback: ${response.text?.slice(0, 200) || ''}`)
+  return null
 }
 
 async function callVertexAgent({ system, user, json = false, temperature = 0.3, maxTokens = 800 }) {

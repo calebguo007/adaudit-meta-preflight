@@ -179,6 +179,33 @@ function planDiffItems(workspace: WorkspaceResult | null) {
   return workspace.plan_diff.items || []
 }
 
+export type VisionFinding = {
+  label: string
+  evidence?: string
+  severity: 'high' | 'medium' | 'low'
+  x_pct: number
+  y_pct: number
+}
+
+export type VisionResultPayload = {
+  id: string
+  provider: string
+  model: string
+  summary?: string
+  extracted_text: string[]
+  findings: VisionFinding[]
+  policy_concerns: string[]
+  off_topic?: boolean
+}
+
+export type VisionAnnotatedPayload = {
+  id: string
+  provider: string
+  model: string
+  image_data_url: string
+  mime_type: string
+}
+
 async function streamWorkspace(
   intake: Record<string, unknown>,
   mode: RunMode,
@@ -192,6 +219,8 @@ async function streamWorkspace(
     onBrowserClose: (id: string) => void
     onEvidence: (item: EvidenceItem) => void
     onWorkspaceDone: (workspace: WorkspaceResult) => void
+    onVisionResult: (result: VisionResultPayload) => void
+    onVisionAnnotated: (result: VisionAnnotatedPayload) => void
     onError: (message: string) => void
   },
 ) {
@@ -268,6 +297,8 @@ async function streamWorkspace(
       if (event === 'browser_close') handlers.onBrowserClose(str('id') || '')
       if (event === 'evidence_arrived') handlers.onEvidence(payload as EvidenceItem)
       if (event === 'workspace_done') handlers.onWorkspaceDone((payload.workspace || payload) as WorkspaceResult)
+      if (event === 'vision_result_arrived') handlers.onVisionResult(payload as unknown as VisionResultPayload)
+      if (event === 'vision_annotated_arrived') handlers.onVisionAnnotated(payload as unknown as VisionAnnotatedPayload)
     }
   }
 }
@@ -746,15 +777,43 @@ function deriveMarks(aspect: number, claimRisk: 'high' | 'medium' | 'low' | 'non
 // Compact Gemini Vision card for the Verdict hero (right column).
 // Replaces the old "Guardrails N/M" tile so the Gemini Award judge sees
 // real Gemini work in the FIRST viewport, not after a scroll.
-function HeroVision({ form, evidence }: { form: IntakeForm; evidence: EvidenceItem[] }) {
+function HeroVision({
+  form,
+  evidence,
+  visionResult,
+  visionAnnotated,
+}: {
+  form: IntakeForm
+  evidence: EvidenceItem[]
+  visionResult: VisionResultPayload | null
+  visionAnnotated: VisionAnnotatedPayload | null
+}) {
   const hasCreative = Boolean(form.creativeDataUrl)
   const claimRisk = getClaimRisk(form.claim) as 'high' | 'medium' | 'low' | 'none'
   const aspect = useImageAspect(form.creativeDataUrl)
-  const allMarks = hasCreative ? deriveMarks(aspect, claimRisk) : []
-  // First 2 marks only — the compact card stays calm.
+
+  // Prefer real Gemini Vision markers when present; else fall back to
+  // aspect-aware heuristic placement so the card never looks empty.
+  const realMarks = visionResult?.findings || []
+  const allMarks: VisionMark[] = realMarks.length > 0
+    ? realMarks.map((f) => ({
+        x: typeof f.x_pct === 'number' ? f.x_pct : 50,
+        y: typeof f.y_pct === 'number' ? f.y_pct : 50,
+        label: f.label,
+        severity: (f.severity || 'medium') as VisionMark['severity'],
+      }))
+    : (hasCreative ? deriveMarks(aspect, claimRisk) : [])
+
   const marks = allMarks.slice(0, 2)
   const visionEvidence = evidence.filter((e) => e.source_type === 'vision')
-  const oneFinding = visionEvidence[0]?.finding || 'Multimodal evidence routed into the final decision.'
+  const oneFinding =
+    visionResult?.summary ||
+    visionEvidence[0]?.finding ||
+    'Multimodal evidence routed into the final decision.'
+
+  // Use Nano Banana annotated image when available, fallback to original upload.
+  const displayedImage = visionAnnotated?.image_data_url || form.creativeDataUrl
+  const isLiveAnnotated = Boolean(visionAnnotated?.image_data_url)
 
   const scrollToVision = () => {
     const el = document.getElementById('aa-vision-full')
@@ -766,14 +825,19 @@ function HeroVision({ form, evidence }: { form: IntakeForm; evidence: EvidenceIt
       <div className="aa-hero-vision-head">
         <span className="aa-hero-vision-badge">
           <i className="aa-vision-dot" /> GEMINI VISION
+          {isLiveAnnotated && <em className="aa-hero-vision-live">LIVE</em>}
         </span>
-        <small>gemini-2.5-flash · vertex-ai · adc</small>
+        <small>
+          {isLiveAnnotated ? 'gemini-2.5-flash-image · annotated' : 'gemini-2.5-flash · vertex-ai · adc'}
+        </small>
       </div>
       <div className={`aa-hero-vision-canvas ${hasCreative ? '' : 'is-empty'}`}>
-        {hasCreative ? (
+        {hasCreative && displayedImage ? (
           <>
-            <img src={form.creativeDataUrl} alt={form.creativeName || 'creative under review'} />
-            {marks.map((m, i) => (
+            <img src={displayedImage} alt={form.creativeName || 'creative under review'} />
+            {/* When Nano Banana already drew the markers into the image, skip
+                the overlay markers so we do not double-mark. */}
+            {!isLiveAnnotated && marks.map((m, i) => (
               <span
                 key={i}
                 className={`aa-hero-vision-mark severity-${m.severity}`}
@@ -804,10 +868,14 @@ function VisionReview({
   form,
   workspace,
   evidence,
+  visionResult,
+  visionAnnotated,
 }: {
   form: IntakeForm
   workspace: WorkspaceResult | null
   evidence: EvidenceItem[]
+  visionResult: VisionResultPayload | null
+  visionAnnotated: VisionAnnotatedPayload | null
 }) {
   const visionEvidence = evidence.filter((e) => e.source_type === 'vision')
   const overlay = workspace?.gemini_overlay?.lines as Record<string, string> | undefined
@@ -815,24 +883,45 @@ function VisionReview({
   const claimRisk = getClaimRisk(form.claim) as 'high' | 'medium' | 'low' | 'none'
   const aspect = useImageAspect(form.creativeDataUrl)
 
-  const markers: VisionMark[] = hasCreative ? deriveMarks(aspect, claimRisk) : []
+  // Real Gemini Vision markers when available; else heuristic fallback.
+  const realMarks: VisionMark[] = (visionResult?.findings || []).map((f) => ({
+    x: typeof f.x_pct === 'number' ? f.x_pct : 50,
+    y: typeof f.y_pct === 'number' ? f.y_pct : 50,
+    label: f.label,
+    severity: (f.severity || 'medium') as VisionMark['severity'],
+  }))
+  const markers: VisionMark[] = realMarks.length > 0
+    ? realMarks
+    : (hasCreative ? deriveMarks(aspect, claimRisk) : [])
+
+  const displayedImage = visionAnnotated?.image_data_url || form.creativeDataUrl
+  const isLiveAnnotated = Boolean(visionAnnotated?.image_data_url)
+  const isLiveResult = Boolean(visionResult)
+
+  // Friendly "what Gemini saw" line: prefer live summary, else evidence.
+  const visionSummary = visionResult?.summary
+  const extractedText = visionResult?.extracted_text || []
+  const policyConcerns = visionResult?.policy_concerns || []
+  const offTopic = !!visionResult?.off_topic
 
   return (
     <section className="aa-vision-review" id="aa-vision-full">
       <div className="aa-vision-head">
         <span className="aa-vision-badge">
           <i className="aa-vision-dot" /> GEMINI VISION · gemini-2.5-flash
+          {isLiveResult && <em className="aa-hero-vision-live" style={{ marginLeft: 8 }}>LIVE</em>}
         </span>
         <strong>Multimodal review of the creative</strong>
-        <span className="aa-vision-meta">{markers.length} markers · {visionEvidence.length || 1} finding{visionEvidence.length === 1 ? '' : 's'}</span>
+        <span className="aa-vision-meta">{markers.length} markers · {visionEvidence.length || 1} finding{visionEvidence.length === 1 ? '' : 's'}{isLiveAnnotated ? ' · nano-banana annotated' : ''}</span>
       </div>
 
       <div className="aa-vision-body">
         <div className="aa-vision-canvas">
-          {hasCreative ? (
+          {hasCreative && displayedImage ? (
             <>
-              <img src={form.creativeDataUrl} alt={form.creativeName || 'creative under review'} />
-              {markers.map((m, i) => (
+              <img src={displayedImage} alt={form.creativeName || 'creative under review'} />
+              {/* Skip overlay markers when Nano Banana already drew them in. */}
+              {!isLiveAnnotated && markers.map((m, i) => (
                 <span
                   key={i}
                   className={`aa-vision-mark severity-${m.severity}`}
@@ -843,7 +932,9 @@ function VisionReview({
                 </span>
               ))}
               <div className="aa-vision-watermark">
-                gemini-2.5-flash · vertex-ai · adc
+                {isLiveAnnotated
+                  ? 'gemini-2.5-flash-image · vertex-ai · adc'
+                  : 'gemini-2.5-flash · vertex-ai · adc'}
               </div>
             </>
           ) : (
@@ -860,7 +951,26 @@ function VisionReview({
         <div className="aa-vision-findings">
           <div className="aa-vision-section">
             <h4>What Gemini saw</h4>
-            {visionEvidence.length > 0 ? (
+            {visionSummary ? (
+              <ul className="aa-vision-list">
+                <li>
+                  <strong>{visionSummary}</strong>
+                  {offTopic && <span>This image does not look like an ad creative — markers suppressed.</span>}
+                </li>
+                {extractedText.length > 0 && (
+                  <li>
+                    <strong>Visible text</strong>
+                    <span>{extractedText.slice(0, 4).join(' · ')}</span>
+                  </li>
+                )}
+                {policyConcerns.length > 0 && (
+                  <li>
+                    <strong>Policy concerns</strong>
+                    <span>{policyConcerns.join(' · ')}</span>
+                  </li>
+                )}
+              </ul>
+            ) : visionEvidence.length > 0 ? (
               <ul className="aa-vision-list">
                 {visionEvidence.map((e, i) => (
                   <li key={e.id || i}>
@@ -879,7 +989,7 @@ function VisionReview({
 
           {markers.length > 0 && (
             <div className="aa-vision-section">
-              <h4>Markers</h4>
+              <h4>Markers{isLiveResult ? ' · gemini-detected' : ' · heuristic'}</h4>
               <ol className="aa-vision-markers">
                 {markers.map((m, i) => (
                   <li key={i} className={`severity-${m.severity}`}>
@@ -908,6 +1018,8 @@ function Verdict({
   workspace,
   toolCalls,
   evidence,
+  visionResult,
+  visionAnnotated,
   executeResult,
   executing,
   onExecute,
@@ -919,6 +1031,8 @@ function Verdict({
   workspace: WorkspaceResult | null
   toolCalls: ToolCall[]
   evidence: EvidenceItem[]
+  visionResult: VisionResultPayload | null
+  visionAnnotated: VisionAnnotatedPayload | null
   executeResult: ExecuteResult | null
   executing: boolean
   onExecute: () => void
@@ -971,7 +1085,7 @@ function Verdict({
             <span><i className="dot human" /> Human approval required</span>
           </div>
         </div>
-        <HeroVision form={form} evidence={evidence} />
+        <HeroVision form={form} evidence={evidence} visionResult={visionResult} visionAnnotated={visionAnnotated} />
         <div className="aa-verdict-scroll-cue" aria-hidden="true">
           <span>scroll for full audit</span>
           <i />
@@ -985,7 +1099,7 @@ function Verdict({
         <Metric label="Execution" value="PAUSED" detail="no active spend path" tone="ready" />
       </section>
 
-      <VisionReview form={form} workspace={workspace} evidence={evidence} />
+      <VisionReview form={form} workspace={workspace} evidence={evidence} visionResult={visionResult} visionAnnotated={visionAnnotated} />
 
       <section className="aa-verdict-grid" id="aa-audit-deep">
         <div className="aa-main-stack">
@@ -1171,6 +1285,11 @@ function App() {
   const [stageLabel, setStageLabel] = useState('Idle')
   const [streamError, setStreamError] = useState<string | null>(null)
   const [workspace, setWorkspace] = useState<WorkspaceResult | null>(null)
+  // Live Gemini Vision + Nano Banana payloads. Populated only in live mode
+  // when a creative was uploaded. When null, the Vision UI uses heuristic
+  // markers; when set, it shows the real Gemini findings + annotated image.
+  const [visionResult, setVisionResult] = useState<VisionResultPayload | null>(null)
+  const [visionAnnotated, setVisionAnnotated] = useState<VisionAnnotatedPayload | null>(null)
   const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null)
   const [executing, setExecuting] = useState(false)
   const [packageCopied, setPackageCopied] = useState(false)
@@ -1185,6 +1304,9 @@ function App() {
     product_url: /^https?:\/\//i.test(form.landingPage.trim()) ? form.landingPage.trim() : undefined,
     assets: form.claim,
     creative_name: form.creativeName,
+    // Pass the uploaded creative through to the backend so live mode can run
+    // real Gemini Vision + Nano Banana. Demo mode ignores this field.
+    creative_data_url: form.creativeDataUrl,
     target_cpa: Number(form.targetCpa || 0) || undefined,
     aov: Number(form.aov || 0) || undefined,
     gross_margin: Number(form.margin || 0) || undefined,
@@ -1197,6 +1319,8 @@ function App() {
     setEvidence([])
     setBrowserSession(null)
     setWorkspace(null)
+    setVisionResult(null)
+    setVisionAnnotated(null)
     setExecuteResult(null)
     setPackageCopied(false)
     setStreamError(null)
@@ -1223,6 +1347,14 @@ function App() {
         window.setTimeout(() => {
           if (runId === currentRun.current) setAct('verdict')
         }, 700)
+      },
+      onVisionResult: (payload) => {
+        if (runId !== currentRun.current) return
+        setVisionResult(payload)
+      },
+      onVisionAnnotated: (payload) => {
+        if (runId !== currentRun.current) return
+        setVisionAnnotated(payload)
       },
       onError: (message) => setStreamError(message),
     }).catch((err) => {
@@ -1293,6 +1425,8 @@ function App() {
           workspace={workspace}
           toolCalls={toolCalls}
           evidence={evidence}
+          visionResult={visionResult}
+          visionAnnotated={visionAnnotated}
           executeResult={executeResult}
           executing={executing}
           onExecute={executePaused}

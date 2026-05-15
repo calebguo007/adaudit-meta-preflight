@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { existsSync, createReadStream } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 
-import { aiInfo } from './ai.mjs'
+import { aiInfo, callVertexVision, callNanoBananaAnnotate } from './ai.mjs'
 import {
   runAuditors,
   runCoordinator,
@@ -382,8 +382,198 @@ async function emitWorkspaceTrace(res, body, requestId, demoMode) {
           ts: new Date().toISOString(),
         })
       }
+
+      // After the fixture vision.analyze fires, if the marketer actually
+      // uploaded a creative AND we are in live mode AND Vertex is reachable,
+      // run the REAL Gemini Vision + Nano Banana pipeline. These are emitted
+      // as additional tool_call events plus two new event types the frontend
+      // consumes to override the heuristic markers.
+      if (item.call.tool === 'vision.analyze' && !demoMode && body.creative_data_url) {
+        await emitLiveVisionPipeline(res, body, requestId)
+      }
+
       await sleep(350)
     }
+  }
+}
+
+/**
+ * Live multimodal pipeline. Runs after the fixture vision.analyze tool when
+ * the marketer has uploaded a creative AND demo_mode is false.
+ *
+ *  1. gemini-2.5-flash multimodal vision → structured findings + region coords
+ *  2. gemini-2.5-flash-image (Nano Banana) → annotated image artifact
+ *
+ * Each step emits its own tool_call_start / tool_call_done pair plus a
+ * dedicated event the frontend listens for:
+ *   - vision_result_arrived   { findings: [...], extracted_text, summary }
+ *   - vision_annotated_arrived { image_data_url, mime_type }
+ *
+ * Failures are reported via tool_call_error but never bubble up — the frontend
+ * keeps the heuristic markers as fallback so the trace still completes.
+ */
+async function emitLiveVisionPipeline(res, body, requestId) {
+  const provider = aiInfo()
+  if (provider.provider !== 'vertex-ai') {
+    // Live Vision pipeline only runs on Vertex (Gemini). Silent skip.
+    return
+  }
+
+  const baseTs = () => new Date().toISOString()
+  const product = body.product || 'creative'
+  const claim = body.claim || ''
+  const audience = body.audience || ''
+
+  // ---------- Step 1: real Gemini Vision ----------
+  const visionId = `${requestId}_real_vision`
+  const visionStart = Date.now()
+  sseSend(res, 'tool_call_start', {
+    id: visionId,
+    tool: 'vision.analyze',
+    stage_id: 'evidence',
+    summary: 'Send creative to Gemini 2.5 Flash for real multimodal review',
+    input: {
+      model: 'gemini-2.5-flash',
+      product,
+      claim,
+      audience,
+      mode: 'live_image',
+    },
+    ts: baseTs(),
+  })
+
+  let visionResult = null
+  try {
+    const system =
+      'You are a senior Meta media buyer reviewing an ad creative before launch. ' +
+      'Identify any policy-sensitive elements visible in the image: outcome promises, ' +
+      'time-bound guarantees, sensational claims, before/after framing, employment / ' +
+      'financial / health outcome language, urgency framing. Be precise: only flag what ' +
+      'is actually visible. If the image is unrelated to advertising (e.g. a generic UI ' +
+      'screenshot), say so and return empty findings.'
+
+    const user =
+      `Product: ${product}\n` +
+      `Stated claim: ${claim || '(none)'}\n` +
+      `Audience: ${audience || '(unspecified)'}\n\n` +
+      `Return JSON in this exact schema:\n` +
+      `{\n` +
+      `  "summary": "<one-sentence description of what is visible in the image>",\n` +
+      `  "extracted_text": ["<up to 6 short text fragments visible in the image>"],\n` +
+      `  "findings": [\n` +
+      `    {\n` +
+      `      "label": "<short risk label, e.g. 'Outcome-promise headline'>",\n` +
+      `      "evidence": "<the actual visible phrase or visual element>",\n` +
+      `      "severity": "high" | "medium" | "low",\n` +
+      `      "x_pct": <0-100 horizontal center of the element>,\n` +
+      `      "y_pct": <0-100 vertical center of the element>\n` +
+      `    }\n` +
+      `  ],\n` +
+      `  "policy_concerns": ["<bullet>"],\n` +
+      `  "off_topic": <true if the image does not look like an ad>\n` +
+      `}\n` +
+      `If nothing risky is visible, return an empty findings array — do not fabricate.`
+
+    visionResult = await callVertexVision({
+      system,
+      user,
+      image: body.creative_data_url,
+      json: true,
+      maxTokens: 900,
+    })
+
+    sseSend(res, 'tool_call_done', {
+      id: visionId,
+      output_summary: visionResult?.summary || 'Vision review complete.',
+      output_full: visionResult,
+      duration_ms: Date.now() - visionStart,
+      meta_extra: { findings: visionResult?.findings?.length || 0, off_topic: !!visionResult?.off_topic },
+      ts: baseTs(),
+    })
+
+    sseSend(res, 'vision_result_arrived', {
+      id: visionId,
+      provider: 'vertex-ai',
+      model: 'gemini-2.5-flash',
+      summary: visionResult?.summary,
+      extracted_text: visionResult?.extracted_text || [],
+      findings: visionResult?.findings || [],
+      policy_concerns: visionResult?.policy_concerns || [],
+      off_topic: !!visionResult?.off_topic,
+      ts: baseTs(),
+    })
+  } catch (err) {
+    sseSend(res, 'tool_call_error', {
+      id: visionId,
+      error: err?.message || String(err),
+      ts: baseTs(),
+    })
+    console.error(`[live-vision] vision.analyze failed: ${err?.message || err}`)
+    return // skip nano-banana if vision failed
+  }
+
+  // If vision saw nothing risky / off-topic, skip the annotation step.
+  const hasFindings = Array.isArray(visionResult?.findings) && visionResult.findings.length > 0
+  if (!hasFindings) {
+    console.log(`[live-vision] no findings; skipping nano-banana annotation`)
+    return
+  }
+
+  // ---------- Step 2: Nano Banana annotation ----------
+  await sleep(400)
+  const nbId = `${requestId}_nano_banana`
+  const nbStart = Date.now()
+  sseSend(res, 'tool_call_start', {
+    id: nbId,
+    tool: 'nano-banana.annotate',
+    stage_id: 'evidence',
+    summary: 'Ask gemini-2.5-flash-image to draw editorial annotations',
+    input: {
+      model: 'gemini-2.5-flash-image',
+      findings: visionResult.findings.map((f) => f.label),
+    },
+    ts: baseTs(),
+  })
+
+  try {
+    const annotated = await callNanoBananaAnnotate({
+      image: body.creative_data_url,
+      findings: visionResult.findings,
+    })
+
+    if (annotated?.base64) {
+      const dataUrl = `data:${annotated.mimeType};base64,${annotated.base64}`
+      sseSend(res, 'tool_call_done', {
+        id: nbId,
+        output_summary: `Annotated image produced (${annotated.mimeType}, ${Math.round(annotated.base64.length * 0.75 / 1024)}KB).`,
+        duration_ms: Date.now() - nbStart,
+        size_bytes: Math.round(annotated.base64.length * 0.75),
+        meta_extra: { annotations: visionResult.findings.length },
+        ts: baseTs(),
+      })
+      sseSend(res, 'vision_annotated_arrived', {
+        id: nbId,
+        provider: 'vertex-ai',
+        model: 'gemini-2.5-flash-image',
+        image_data_url: dataUrl,
+        mime_type: annotated.mimeType,
+        ts: baseTs(),
+      })
+    } else {
+      sseSend(res, 'tool_call_done', {
+        id: nbId,
+        output_summary: 'Nano Banana returned no image; keeping coord-based markers.',
+        duration_ms: Date.now() - nbStart,
+        ts: baseTs(),
+      })
+    }
+  } catch (err) {
+    sseSend(res, 'tool_call_error', {
+      id: nbId,
+      error: err?.message || String(err),
+      ts: baseTs(),
+    })
+    console.error(`[live-vision] nano-banana failed: ${err?.message || err}`)
   }
 }
 
