@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { findRiskyClaims } from './claim-risk.mjs'
 
 const ARTIFACT_ROOT = resolve(process.cwd(), 'artifacts', 'evidence')
 
@@ -218,17 +219,6 @@ async function collectLiveFetchEvidence(input, jobId, importError) {
       `Playwright browser capture was unavailable: ${importError.message}.`,
     ],
   }
-}
-
-function findRiskyClaims(text) {
-  const claims = []
-  if (/land a job|guarantee|guaranteed|7 days|seven days|money back/i.test(text)) {
-    claims.push('time-bound or guaranteed employment outcome claim')
-  }
-  if (/you are|your (?:body|health|credit|debt|income|job)/i.test(text)) {
-    claims.push('possible personal-attribute framing')
-  }
-  return claims
 }
 
 function extractClaims(text) {

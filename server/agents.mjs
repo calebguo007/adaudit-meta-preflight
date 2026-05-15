@@ -8,6 +8,7 @@
 
 import { aiInfo, callAgent, streamAgent } from './ai.mjs'
 import { collectEvidence } from './evidence.mjs'
+import { hasClaimRewrite, pickOriginalRiskyClaim } from './claim-risk.mjs'
 
 // ----- shared output schema (for the prompts) -----
 
@@ -1152,27 +1153,6 @@ function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendatio
       detail: 'Agent timeline must reveal the causal chain in order.',
     },
   ]
-}
-
-function hasClaimRewrite(planDiff) {
-  const items = Array.isArray(planDiff?.items) ? planDiff.items : []
-  return items.some((item) => {
-    const field = String(item?.field || '')
-    const before = String(item?.before || '')
-    const after = String(item?.after || '')
-    const fieldIsClaim = /claim|hook|copy|message/i.test(field)
-    const beforeLooksRisky = /guarantee|guaranteed|land a job|7 days|seven days|outcome promise|time-bound|employment outcome/i.test(before)
-    const afterLooksSafe = /proof|diagnosis|diagnostic|audit|score|hidden|resume issue|resume issues|readiness|checklist/i.test(after)
-    return fieldIsClaim && beforeLooksRisky && afterLooksSafe
-  })
-}
-
-function pickOriginalRiskyClaim(intake, evidence) {
-  const text = `${intake.assets || ''}\n${intake.landing_page || ''}`
-  const match = text.match(/land a job in 7 days|guaranteed?[^,.!。！？]{0,80}|[^,.!。！？]{0,40}7 days[^,.!。！？]{0,40}/i)
-  if (match) return match[0]
-  if (Array.isArray(evidence.risky_claims) && evidence.risky_claims[0]) return evidence.risky_claims[0]
-  return 'Risky outcome promise'
 }
 
 function parseMoneyValue(value) {
