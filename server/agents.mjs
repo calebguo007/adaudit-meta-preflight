@@ -910,7 +910,7 @@ function fallbackWorkspace(intake, evidenceBundle, meta = {}) {
   })
 }
 
-function completeWorkspace(intake, rawWorkspace, evidenceBundle, overrides = {}) {
+export function completeWorkspace(intake, rawWorkspace, evidenceBundle, overrides = {}) {
   const workspace = rawWorkspace && typeof rawWorkspace === 'object'
     ? rawWorkspace
     : fallbackWorkspace(intake, evidenceBundle)
@@ -1100,7 +1100,7 @@ function buildPlanDiff({ budgetAdSetLimit, objectiveRecommendation, hasRiskyClai
   }
 }
 
-function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim }) {
+export function buildCausalChecks({ workspace, budgetAdSetLimit, objectiveRecommendation, hasRiskyClaim }) {
   const finalAdSetCount = workspace.recommended_plan?.ad_sets?.length || 0
   const finalObjective = workspace.recommended_plan?.objective || workspace.paused_execution_spec?.campaign?.objective
   const deliveryStatus = workspace.delivery_readiness?.status || 'unknown'

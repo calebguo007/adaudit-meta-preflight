@@ -3,11 +3,13 @@ const RISK_PATTERNS = [
     id: 'employment_outcome_guarantee',
     label: 'time-bound or guaranteed employment outcome claim',
     pattern: /land a job|get hired|guarantee|guaranteed|7 days|seven days|money back|employment outcome|time-bound/i,
+    extractPattern: /land a job in 7 days|land a job|get hired|guaranteed?[^,.!。！？]{0,80}|[^,.!。！？]{0,40}(?:7 days|seven days|money back|employment outcome|time-bound)[^,.!。！？]{0,40}/i,
   },
   {
     id: 'personal_attribute_framing',
     label: 'possible personal-attribute framing',
     pattern: /you are|your (?:body|health|credit|debt|income|job)/i,
+    extractPattern: /(?:you are|your (?:body|health|credit|debt|income|job))[^,.!。！？]{0,80}/i,
   },
 ]
 
@@ -35,8 +37,10 @@ export function hasClaimRewrite(planDiff) {
 
 export function pickOriginalRiskyClaim(intake = {}, evidence = {}) {
   const text = `${intake.assets || ''}\n${intake.landing_page || ''}`
-  const match = text.match(/land a job in 7 days|guaranteed?[^,.!。！？]{0,80}|[^,.!。！？]{0,40}7 days[^,.!。！？]{0,40}/i)
-  if (match) return match[0].trim()
+  for (const risk of RISK_PATTERNS) {
+    const match = text.match(risk.extractPattern || risk.pattern)
+    if (match) return match[0].trim()
+  }
   if (Array.isArray(evidence.risky_claims) && evidence.risky_claims[0]) return evidence.risky_claims[0]
   return 'Risky outcome promise'
 }
