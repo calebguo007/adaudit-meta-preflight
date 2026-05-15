@@ -62,9 +62,20 @@ type WorkspaceResult = {
     fallback?: boolean
     latency_ms?: number
     evidence_mode?: string
+    knowledge_packs?: string[]
     paused_only?: boolean
     causal_checks?: { passed?: number; total?: number }
     ai?: { provider?: string; model?: string; location?: string; auth?: string }
+  }
+  knowledge_context?: {
+    mode?: string
+    query?: string
+    selected?: Array<{
+      id?: string
+      title?: string
+      score?: number
+      snippets?: string[]
+    }>
   }
   scenarios?: Array<Record<string, unknown>>
   recommended_plan?: {
@@ -1204,6 +1215,12 @@ function Verdict({
             packageCopied={packageCopied}
           />
 
+          <PanelTitle title="Execution proof" meta="real tool provenance" />
+          <ExecutionProof workspace={workspace} toolCalls={toolCalls} evidence={evidence} />
+
+          <PanelTitle title="Knowledge packs used" meta={`${workspace?.knowledge_context?.selected?.length || workspace?.provenance?.knowledge_packs?.length || 0} packs`} />
+          <KnowledgeTrace workspace={workspace} toolCalls={toolCalls} />
+
           <PanelTitle title="Causal guardrails" meta={`${passed}/${checks.length || 6} pass`} />
           <div className="aa-check-list">
             {checks.map((check, index) => (
@@ -1245,9 +1262,108 @@ function Verdict({
             )}
             <button className="aa-secondary" type="button" onClick={onReset}>Run another brief</button>
           </div>
+
+          <PanelTitle title="Post-launch optimizer" meta="planned read-only loop" />
+          <PostLaunchOptimizer />
         </aside>
       </section>
     </main>
+  )
+}
+
+function ExecutionProof({
+  workspace,
+  toolCalls,
+  evidence,
+}: {
+  workspace: WorkspaceResult | null
+  toolCalls: ToolCall[]
+  evidence: EvidenceItem[]
+}) {
+  const proofTools = ['browser.fetch', 'browser.screenshot', 'knowledge.search', 'policy.lookup', 'vision.analyze', 'math.compute', 'audit.score']
+  const rows = proofTools
+    .map((tool) => toolCalls.find((call) => call.tool === tool))
+    .filter(Boolean) as ToolCall[]
+  const mode = workspace?.provenance?.evidence_mode || 'unknown'
+  const requestId = workspace?.provenance?.request_id || 'pending'
+
+  return (
+    <div className="aa-proof-card">
+      <div className="aa-proof-summary">
+        <div><span>Request</span><strong>{requestId}</strong></div>
+        <div><span>Evidence mode</span><strong>{mode}</strong></div>
+        <div><span>Findings</span><strong>{evidence.length}</strong></div>
+      </div>
+      <div className="aa-proof-list">
+        {rows.map((call) => (
+          <article key={call.id}>
+            <span className={`aa-proof-status is-${call.status}`}>{call.status}</span>
+            <strong>{call.tool}</strong>
+            <p>{call.summary}</p>
+            <small>{[call.http_status ? `HTTP ${call.http_status}` : '', call.duration_ms ? `${call.duration_ms}ms` : '', call.size_bytes ? `${call.size_bytes} bytes` : ''].filter(Boolean).join(' · ') || 'tool event captured'}</small>
+          </article>
+        ))}
+        {!rows.length && <p className="aa-proof-empty">Tool provenance appears during workspace streaming. Run Live tools to capture browser, knowledge, vision, math, and guardrail events.</p>}
+      </div>
+    </div>
+  )
+}
+
+function KnowledgeTrace({ workspace, toolCalls }: { workspace: WorkspaceResult | null; toolCalls: ToolCall[] }) {
+  const packs = workspace?.knowledge_context?.selected || []
+  const knowledgeTool = [...toolCalls].reverse().find((call) => call.tool === 'knowledge.search')
+  const selectedFromTool = Array.isArray((knowledgeTool?.output as Record<string, unknown> | undefined)?.selected_packs)
+    ? ((knowledgeTool?.output as Record<string, unknown>).selected_packs as Array<Record<string, unknown>>)
+    : []
+
+  return (
+    <div className="aa-knowledge-card">
+      <div className="aa-knowledge-top">
+        <span>KnowledgeAgent</span>
+        <strong>{packs.length ? 'runtime retrieval' : selectedFromTool.length ? 'tool retrieval' : 'awaiting retrieval'}</strong>
+      </div>
+      <div className="aa-knowledge-list">
+        {packs.length ? packs.slice(0, 5).map((pack) => (
+          <article key={pack.id || pack.title}>
+            <span>{pack.id}</span>
+            <strong>{pack.title}</strong>
+            <p>{pack.snippets?.[0] || 'Paid-media operating context used by Gemini strategy.'}</p>
+          </article>
+        )) : selectedFromTool.length ? selectedFromTool.slice(0, 5).map((pack) => (
+          <article key={String(pack.id || pack.title)}>
+            <span>{asText(pack.id)}</span>
+            <strong>{asText(pack.title)}</strong>
+            <p>Score {asText(pack.score, 'n/a')} · passed into tool evidence.</p>
+          </article>
+        )) : (
+          <p className="aa-proof-empty">Knowledge packs will appear after workspace completion.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PostLaunchOptimizer() {
+  const items = [
+    ['Read-only API', 'Ingest spend, CPM, CPC, CTR, CPA, ROAS, frequency, and learning status from Meta/TikTok/YouTube.'],
+    ['Detect drift', 'Flag fatigue, budget fragmentation, CPA drift, weak lead quality, or stalled learning phase.'],
+    ['Recommend action', 'Suggest hold, pause, rewrite, consolidate, or 20% scale with evidence.'],
+    ['Human gate', 'Require approval before any budget or status change.'],
+  ]
+
+  return (
+    <div className="aa-roadmap-card">
+      <div className="aa-roadmap-banner">
+        <strong>Planned after PAUSED launch</strong>
+        <span>not active in this demo</span>
+      </div>
+      {items.map(([title, body]) => (
+        <article key={title}>
+          <strong>{title}</strong>
+          <p>{body}</p>
+        </article>
+      ))}
+    </div>
   )
 }
 
