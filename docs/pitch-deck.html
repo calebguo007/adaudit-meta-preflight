@@ -1,482 +1,1429 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AdAudit -- AI Agent Olympics Pitch</title>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AdAudit · Pitch deck · AI Agent Olympics Milan 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..700,0..100,0..1;1,9..144,400..600,0..100,0..1&family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+/>
 <style>
-/* === Reset === */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  /* ============================================================
+     Design system — mirrors the AdAudit product UI exactly.
+     Warm paper, deep editorial blue accent, Fraunces display.
+     Each slide gets its own composition. No template repeats.
+     ============================================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* === Design tokens (AdAudit palette) === */
-:root{
-  --bg-warm:#F7F6F2;
-  --bg-white:#FFFFFF;
-  --ink:#1A1A1A;
-  --ink-soft:#615D59;
-  --ink-muted:#A39E98;
-  --deep-blue:#0F2C5E;
-  --deep-blue-light:#1A3D7A;
-  --blue-accent:#2B7DE9;
-  --red-risk:#C0392B;
-  --amber-warn:#D4880F;
-  --green-safe:#1AAE39;
-  --green-soft:#2A9D99;
-  --border-whisper:1px solid rgba(0,0,0,.1);
-  --radius:6px;
-  --radius-pill:9999px;
-  --shadow-card:rgba(50,50,93,.08) 0 8px 24px,rgba(0,0,0,.04) 0 2px 8px;
-  --shadow-deep:rgba(50,50,93,.15) 0 16px 40px -16px,rgba(0,0,0,.06) 0 8px 20px -8px;
-  --font-display:'Fraunces',Georgia,serif;
-  --font-sans:'Inter',system-ui,-apple-system,sans-serif;
-  --font-mono:'DM Mono','JetBrains Mono',ui-monospace,monospace;
-  --slide-w:1920px;
-  --slide-h:1080px;
-}
+  :root {
+    --paper: #F7F6F2;
+    --paper-edge: #ECEBE5;
+    --surface: #FBFAF6;
+    --surface-alt: #F1EFE9;
+    --ink: #0F0F0F;
+    --ink-soft: #2A2A2A;
+    --gray-1: #565657;
+    --gray-2: #9A9A98;
+    --gray-3: #C8C7C2;
+    --border: #DEDCD4;
+    --border-soft: #EBE9E3;
+    --signature: #0F2C5E;
+    --signature-soft: #1E3A8A;
+    --signature-bg: #E3E6ED;
+    --risk: #7C2D12;
+    --risk-bg: #F5E6DD;
+    --warn: #92400E;
+    --warn-bg: #F3E8D4;
+    --ready: #14532D;
+    --ready-bg: #E2ECDE;
 
-html,body{
-  height:100%;
-  background:#E8E7E3;
-  font-family:var(--font-sans);
-  color:var(--ink);
-  overflow:hidden;
-}
+    --font-serif: 'Fraunces', 'Times New Roman', Georgia, serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'DM Mono', 'JetBrains Mono', ui-monospace, monospace;
 
-/* === Deck container === */
-.deck{
-  position:relative;
-  width:100vw;height:100vh;
-  overflow:hidden;
-}
+    --slide-w: 1920px;
+    --slide-h: 1080px;
+    --pad-x: 120px;
+    --pad-y: 88px;
+  }
 
-.slide{
-  position:absolute;
-  width:var(--slide-w);height:var(--slide-h);
-  background:var(--bg-warm);
-  padding:80px 100px;
-  display:flex;flex-direction:column;
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .4s ease;
-  will-change:opacity;
-  /* centering will be done by JS via left/top + transform */
-}
-.slide.active{
-  opacity:1;
-  pointer-events:auto;
-}
+  html, body {
+    height: 100%;
+    background: #E8E7E3;
+    font-family: var(--font-sans);
+    color: var(--ink);
+    overflow: hidden;
+    font-feature-settings: 'ss01', 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
 
-/* === Typography === */
-.slide-title{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-size:clamp(48px,5.5vw,72px);
-  line-height:.96;
-  letter-spacing:-.03em;
-  color:var(--deep-blue);
-  margin-bottom:8px;
-}
-.slide-subtitle{
-  font-family:var(--font-sans);
-  font-weight:500;
-  font-size:clamp(18px,1.8vw,22px);
-  color:var(--ink-soft);
-  margin-bottom:40px;
-  letter-spacing:.01em;
-}
-.bullets{
-  list-style:none;
-  display:flex;flex-direction:column;gap:18px;
-  flex:1;
-}
-.bullets li{
-  font-family:var(--font-sans);
-  font-weight:400;
-  font-size:clamp(20px,2vw,26px);
-  line-height:1.45;
-  color:var(--ink);
-  padding-left:28px;
-  position:relative;
-}
-.bullets li::before{
-  content:'';
-  position:absolute;left:0;top:10px;
-  width:8px;height:8px;
-  background:var(--deep-blue);
-  border-radius:50%;
-}
-.bullets li.mono{
-  font-family:var(--font-mono);
-  font-weight:400;
-  font-size:clamp(18px,1.7vw,23px);
-  color:var(--ink-soft);
-}
-.bullets li.mono::before{
-  background:var(--ink-muted);
-  width:6px;height:6px;
-}
+  .deck { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
 
-/* === Guardrail list === */
-.guardrail-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px 28px;
-}
-.guardrail-item{
-  display:flex;align-items:center;gap:10px;
-  font-family:var(--font-mono);
-  font-weight:500;
-  font-size:clamp(16px,1.5vw,20px);
-  color:var(--deep-blue);
-}
-.guardrail-item .check{
-  color:var(--green-safe);
-  font-weight:700;
-  font-size:1.1em;
-}
-.guardrail-item .label{
-  color:var(--ink-soft);
-  font-family:var(--font-sans);
-  font-weight:400;
-  font-size:.85em;
-}
+  .slide {
+    position: absolute;
+    width: var(--slide-w);
+    height: var(--slide-h);
+    background: var(--paper);
+    padding: var(--pad-y) var(--pad-x);
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
 
-/* === Arch flow === */
-.arch-flow{
-  display:flex;flex-direction:column;gap:6px;
-  margin-top:8px;
-}
-.arch-row{
-  display:flex;align-items:center;gap:12px;
-  font-family:var(--font-mono);
-  font-size:clamp(14px,1.3vw,18px);
-  color:var(--ink-soft);
-}
-.arch-row .agent-name{
-  font-family:var(--font-sans);
-  font-weight:600;
-  color:var(--deep-blue);
-}
-.arch-row .tools{
-  color:var(--ink-muted);
-  font-weight:400;
-}
-.arch-arrow{
-  color:var(--ink-muted);
-  font-size:18px;
-  text-align:center;
-  line-height:1;
-}
-.arch-divider{
-  border-top:1px dashed var(--deep-blue);
-  padding-top:6px;
-}
-.arch-divider-label{
-  font-family:var(--font-sans);
-  font-weight:700;
-  color:var(--deep-blue);
-  font-size:clamp(16px,1.5vw,20px);
-}
+  /* Grain / texture overlay — gives every slide depth without distracting */
+  .slide::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.04 0 0 0 0 0.04 0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+  }
 
-/* === Track table === */
-.track-table{
-  display:flex;flex-direction:column;gap:14px;
-}
-.track-row{
-  display:flex;gap:16px;align-items:flex-start;
-}
-.track-name{
-  font-family:var(--font-sans);
-  font-weight:700;
-  font-size:clamp(18px,1.7vw,22px);
-  color:var(--deep-blue);
-  min-width:220px;
-  flex-shrink:0;
-}
-.track-fit{
-  font-family:var(--font-sans);
-  font-weight:400;
-  font-size:clamp(18px,1.7vw,22px);
-  color:var(--ink);
-  line-height:1.4;
-}
+  /* Slide number marker — top-right of every slide, mono */
+  .slide-num {
+    position: absolute;
+    top: 56px;
+    right: var(--pad-x);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    color: var(--gray-1);
+    z-index: 2;
+  }
+  .slide-num .sep { color: var(--gray-3); margin: 0 6px; }
 
-/* === Quote block === */
-.quote-block{
-  font-family:var(--font-display);
-  font-weight:400;
-  font-style:italic;
-  font-size:clamp(24px,2.6vw,36px);
-  color:var(--deep-blue);
-  line-height:1.2;
-  padding:24px 0;
-  border-left:3px solid var(--deep-blue);
-  padding-left:24px;
-}
+  /* Wordmark — top-left of every slide */
+  .wordmark {
+    position: absolute;
+    top: 56px;
+    left: var(--pad-x);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 500;
+    font-variation-settings: 'opsz' 24, 'SOFT' 25;
+    font-size: 22px;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 2;
+  }
+  .wordmark::before {
+    content: '';
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--signature);
+    border-radius: 4px;
+    background:
+      linear-gradient(to right, var(--signature) 2px, transparent 2px) center / 6px 100% no-repeat,
+      linear-gradient(to right, var(--signature) 2px, transparent 2px) center / 14px 100% no-repeat;
+  }
 
-/* === Pill badge === */
-.pill{
-  display:inline-flex;
-  align-items:center;gap:6px;
-  font-family:var(--font-mono);
-  font-weight:500;
-  font-size:clamp(11px,1vw,14px);
-  text-transform:uppercase;
-  letter-spacing:.06em;
-  padding:4px 12px;
-  border-radius:var(--radius-pill);
-  background:var(--deep-blue);
-  color:#fff;
-}
-.pill.red{background:var(--red-risk);color:#fff;}
-.pill.amber{background:var(--amber-warn);color:#fff;}
-.pill.green{background:var(--green-safe);color:#fff;}
+  /* ============================================================
+     SLIDE 1 — HOOK
+     Asymmetric editorial. Mono kicker → giant Fraunces italic
+     question → restrained body line.
+     ============================================================ */
+  .s1 { padding-top: 220px; }
+  .s1 .kicker {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signature);
+    margin-bottom: 32px;
+  }
+  .s1 h1 {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30, 'WONK' 0;
+    font-weight: 500;
+    font-size: 184px;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+    max-width: 1500px;
+  }
+  .s1 .lede {
+    margin-top: 56px;
+    max-width: 880px;
+    font-family: var(--font-sans);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--gray-1);
+  }
+  .s1 .lede em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .s1 .rule {
+    margin-top: 64px;
+    width: 64px;
+    height: 1px;
+    background: var(--signature);
+  }
+  .s1 .footnote {
+    margin-top: 32px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--gray-1);
+    letter-spacing: 0.04em;
+  }
 
-/* === CTA === */
-.cta-row{
-  display:flex;gap:16px;align-items:center;
-  margin-top:auto;
-  padding-top:24px;
-}
-.cta-url{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-style:italic;
-  font-size:clamp(28px,3vw,40px);
-  color:var(--deep-blue);
-}
-.cta-link{
-  font-family:var(--font-sans);
-  font-weight:500;
-  font-size:clamp(18px,1.7vw,22px);
-  color:var(--blue-accent);
-  text-decoration:underline;
-  text-decoration-color:rgba(43,125,233,.3);
-}
+  /* ============================================================
+     SLIDE 2 — THE THREE VERBS (PLAN · AUDIT · PAUSE)
+     Three giant words in horizontal sequence. Each word is its
+     own column. Below: explanation. No bullets.
+     ============================================================ */
+  .s2 { padding-top: 200px; }
+  .s2 .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gray-1);
+    margin-bottom: 16px;
+  }
+  .s2 h2 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variation-settings: 'opsz' 96;
+    font-size: 56px;
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin-bottom: 96px;
+    max-width: 1300px;
+  }
+  .s2 h2 em {
+    font-style: italic;
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+    color: var(--signature);
+  }
 
-/* === Slide counter === */
-.slide-counter{
-  position:fixed;
-  bottom:24px;right:32px;
-  font-family:var(--font-mono);
-  font-weight:400;
-  font-size:14px;
-  color:var(--ink-muted);
-  z-index:100;
-}
+  .verbs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 56px;
+  }
+  .verb {
+    border-top: 1px solid var(--ink);
+    padding-top: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .verb .vnum {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--gray-1);
+  }
+  .verb .vname {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 500;
+    font-size: 124px;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+  }
+  .verb.pause .vname { color: var(--ready); }
+  .verb .vbody {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--gray-1);
+    max-width: 40ch;
+  }
+  .verb .vbody strong { color: var(--ink); font-weight: 600; }
+  .verb .vtag {
+    margin-top: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--signature);
+  }
 
-/* === Nav arrows === */
-.nav-btn{
-  position:fixed;
-  top:50%;
-  transform:translateY(-50%);
-  width:48px;height:48px;
-  border:var(--border-whisper);
-  background:rgba(255,255,255,.72);
-  border-radius:var(--radius);
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;z-index:100;
-  font-family:var(--font-sans);font-size:20px;
-  color:var(--ink);
-  transition:background .2s,transform .2s;
-  backdrop-filter:blur(8px);
-}
-.nav-btn:hover{background:#fff;transform:translateY(-50%) scale(1.08)}
-.nav-prev{left:16px}
-.nav-next{right:16px}
+  /* ============================================================
+     SLIDE 3 — ARCHITECTURE
+     Real SVG flow diagram. 8 agent nodes in a deliberate chain.
+     Causal guardrails sit as a horizontal "barrier" between the
+     coordinator and the executor.
+     ============================================================ */
+  .s3 { padding-top: 160px; }
+  .s3 .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+  .s3 .head h2 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variation-settings: 'opsz' 96;
+    font-size: 76px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    max-width: 980px;
+  }
+  .s3 .head h2 em {
+    font-style: italic;
+    color: var(--signature);
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+  }
+  .s3 .head .meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--gray-1);
+    line-height: 1.55;
+  }
+  .s3 .head .meta strong { color: var(--ink); font-weight: 600; }
 
-/* === Keyboard hint === */
-.key-hint{
-  position:fixed;
-  bottom:24px;left:32px;
-  font-family:var(--font-mono);
-  font-size:12px;
-  color:var(--ink-muted);
-  z-index:100;
-}
+  .arch {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr) 280px;
+    gap: 32px;
+    align-items: stretch;
+  }
+  .arch-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .arch-col-head {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gray-1);
+    margin-bottom: 12px;
+  }
+  .arch-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 72px;
+  }
+  .arch-node .name {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    margin-bottom: 4px;
+  }
+  .arch-node .tools {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--gray-1);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
 
-/* === Responsive scale === */
-/* responsive scaling handled by JS */
+  .arch-rail {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .arch-rail::before {
+    content: '';
+    position: absolute;
+    top: 36px;
+    bottom: 36px;
+    left: 24px;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--border) 0%, var(--signature) 50%, var(--border) 100%);
+  }
+  .arch-step {
+    position: relative;
+    padding-left: 60px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    padding-right: 16px;
+  }
+  .arch-step::before {
+    content: '';
+    position: absolute;
+    left: 18px; top: 22px;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--signature);
+    box-shadow: 0 0 0 3px var(--paper);
+  }
+  .arch-step .name {
+    font-family: var(--font-sans);
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 3px;
+  }
+  .arch-step .tools {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--gray-1);
+    letter-spacing: 0.02em;
+  }
+
+  .arch-guard {
+    margin: 4px 0;
+    padding: 14px 16px 14px 60px;
+    background: var(--signature);
+    color: #fff;
+    border-radius: 8px;
+    position: relative;
+  }
+  .arch-guard::before {
+    content: '';
+    position: absolute;
+    left: 18px; top: 50%;
+    transform: translateY(-50%);
+    width: 13px; height: 13px;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .arch-guard .name {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .arch-guard .tools {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    opacity: 0.85;
+  }
+
+  /* ============================================================
+     SLIDE 4 — MULTIMODAL (mock annotated creative)
+     Split layout: SVG mock ad with red markers (left) +
+     "What Gemini saw" panel (right). Top: GEMINI VISION badge.
+     ============================================================ */
+  .s4 { padding-top: 160px; }
+  .s4 .head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 48px;
+    margin-bottom: 56px;
+  }
+  .s4 h2 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variation-settings: 'opsz' 96;
+    font-size: 76px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    max-width: 1000px;
+  }
+  .s4 h2 em {
+    font-style: italic;
+    color: var(--signature);
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+  }
+  .s4 .badge-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .gem-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    background: var(--signature);
+    color: #fff;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+  }
+  .gem-badge .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    animation: pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.7); } }
+
+  .s4 .submeta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--gray-1);
+  }
+
+  .vision-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 64px;
+    align-items: start;
+  }
+
+  .creative-mock {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background:
+      linear-gradient(135deg, #1e3a8a 0%, #0f2c5e 50%, #1e1b4b 100%);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+  }
+  .creative-mock .cm-headline {
+    position: absolute;
+    top: 14%;
+    left: 8%;
+    right: 8%;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 600;
+    font-size: 68px;
+    line-height: 1.02;
+    color: #fff;
+    letter-spacing: -0.025em;
+  }
+  .creative-mock .cm-headline u { text-decoration-color: rgba(248, 113, 113, 0.85); text-decoration-thickness: 3px; }
+  .creative-mock .cm-sub {
+    position: absolute;
+    top: 47%;
+    left: 8%;
+    right: 8%;
+    font-family: var(--font-sans);
+    font-size: 22px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: -0.005em;
+  }
+  .creative-mock .cm-cta {
+    position: absolute;
+    bottom: 14%;
+    left: 8%;
+    padding: 14px 28px;
+    background: #FBBF24;
+    color: #1F1300;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+  }
+  .creative-mock .cm-brand {
+    position: absolute;
+    bottom: 14%;
+    right: 8%;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.6);
+  }
+  .creative-mock .cm-watermark {
+    position: absolute;
+    bottom: 14px;
+    left: 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.65);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+
+  .marker {
+    position: absolute;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    border: 3px solid var(--risk);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--risk);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    transform: translate(-50%, -50%);
+  }
+  .marker::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0.35;
+    animation: marker-ring 2.4s ease-out infinite;
+  }
+  @keyframes marker-ring {
+    0% { opacity: 0.6; transform: scale(0.8); }
+    100% { opacity: 0; transform: scale(1.7); }
+  }
+  .marker.m2 { border-color: var(--risk); color: var(--risk); }
+  .marker.m3 { border-color: var(--warn); color: var(--warn); }
+
+  .findings {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .findings-head {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray-1);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 6px;
+  }
+  .finding {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .finding .n {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--risk);
+    color: var(--risk);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .finding.medium .n { border-color: var(--warn); color: var(--warn); }
+  .finding .body strong {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    margin-bottom: 3px;
+  }
+  .finding .body span {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--gray-1);
+    letter-spacing: 0.02em;
+  }
+  .nano-row {
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .nano-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--warn);
+    background: var(--warn-bg);
+    padding: 5px 10px;
+    border-radius: 999px;
+  }
+  .nano-line {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    color: var(--gray-1);
+    line-height: 1.5;
+  }
+  .nano-line strong { color: var(--ink); font-weight: 600; }
+
+  /* ============================================================
+     SLIDE 5 — GUARDRAILS (2x3 grid)
+     ============================================================ */
+  .s5 { padding-top: 160px; }
+  .s5 .head { margin-bottom: 56px; }
+  .s5 h2 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variation-settings: 'opsz' 96;
+    font-size: 76px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    margin-bottom: 18px;
+    max-width: 1300px;
+  }
+  .s5 h2 em {
+    font-style: italic;
+    color: var(--signature);
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+  }
+  .s5 .sub {
+    font-family: var(--font-sans);
+    font-size: 22px;
+    color: var(--gray-1);
+    max-width: 88ch;
+    line-height: 1.5;
+  }
+  .s5 .sub strong { color: var(--ink); font-weight: 600; }
+
+  .guard-grid {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, 1fr);
+    gap: 18px;
+    flex: 1;
+  }
+  .guard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .guard-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .guard-num {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-size: 48px;
+    line-height: 0.92;
+    color: var(--signature);
+  }
+  .guard-pass {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--ready);
+    background: var(--ready-bg);
+    padding: 4px 9px;
+    border-radius: 999px;
+  }
+  .guard-id {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+  .guard-body {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--gray-1);
+  }
+
+  .s5 .closer {
+    margin-top: 56px;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 500;
+    font-size: 56px;
+    line-height: 1.05;
+    color: var(--ink);
+    letter-spacing: -0.022em;
+  }
+  .s5 .closer em { color: var(--signature); }
+
+  /* ============================================================
+     SLIDE 6 — TRACKS
+     Editorial list. Each award track gets a row with Fraunces
+     italic name and one-sentence justification.
+     ============================================================ */
+  .s6 { padding-top: 200px; }
+  .s6 .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signature);
+    margin-bottom: 24px;
+  }
+  .s6 h2 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variation-settings: 'opsz' 96;
+    font-size: 84px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    margin-bottom: 80px;
+    max-width: 1280px;
+  }
+  .s6 h2 em {
+    font-style: italic;
+    color: var(--signature);
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+  }
+  .tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border-top: 1px solid var(--border);
+  }
+  .track {
+    display: grid;
+    grid-template-columns: 380px minmax(0, 1fr) 64px;
+    gap: 48px;
+    align-items: center;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .track-name {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.025em;
+  }
+  .track-fit {
+    font-family: var(--font-sans);
+    font-size: 20px;
+    color: var(--gray-1);
+    line-height: 1.5;
+  }
+  .track-fit strong { color: var(--ink); font-weight: 600; }
+  .track-id {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--gray-2);
+    letter-spacing: 0.08em;
+  }
+
+  /* ============================================================
+     SLIDE 7 — CTA (CINEMA)
+     Minimal cinema. Huge italic "Try it.", URL massive, GitHub
+     small, closing tagline at bottom.
+     ============================================================ */
+  .s7 {
+    padding-top: 200px;
+    background:
+      radial-gradient(60% 60% at 25% 25%, rgba(15, 44, 94, 0.07), transparent 70%),
+      radial-gradient(40% 40% at 80% 80%, rgba(20, 83, 45, 0.05), transparent 70%),
+      var(--paper);
+  }
+  .s7 .top {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signature);
+    margin-bottom: 64px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .s7 .top .pulse {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--ready);
+    box-shadow: 0 0 0 4px rgba(20, 83, 45, 0.15);
+    animation: pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  .s7 h1 {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 500;
+    font-size: 220px;
+    line-height: 0.9;
+    letter-spacing: -0.045em;
+    color: var(--ink);
+    margin-bottom: 64px;
+  }
+  .s7 .url-box {
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 28px 0;
+    margin-bottom: 40px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 32px;
+  }
+  .s7 .url-box .label {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gray-1);
+  }
+  .s7 .url-box .url {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 96, 'SOFT' 25;
+    font-weight: 500;
+    font-size: 56px;
+    letter-spacing: -0.018em;
+    color: var(--signature);
+  }
+  .s7 .github {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    color: var(--gray-1);
+    letter-spacing: 0.04em;
+    margin-bottom: auto;
+  }
+  .s7 .github strong { color: var(--ink); font-weight: 500; }
+  .s7 .closer {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: 'opsz' 96, 'SOFT' 30;
+    font-weight: 500;
+    font-size: 36px;
+    line-height: 1.2;
+    color: var(--ink);
+    letter-spacing: -0.018em;
+    max-width: 1100px;
+    margin-top: auto;
+    padding-top: 48px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ============================================================
+     Deck chrome
+     ============================================================ */
+  .counter {
+    position: fixed;
+    bottom: 28px; right: 36px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: 0.12em;
+    z-index: 100;
+    background: rgba(247, 246, 242, 0.85);
+    backdrop-filter: blur(8px);
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .counter .cur { color: var(--signature); font-weight: 600; }
+  .counter .sep { color: var(--gray-2); margin: 0 6px; }
+
+  .progress {
+    position: fixed;
+    bottom: 28px;
+    left: 36px;
+    display: flex;
+    gap: 6px;
+    z-index: 100;
+  }
+  .progress .seg {
+    width: 36px;
+    height: 2px;
+    background: var(--gray-3);
+    border-radius: 1px;
+    transition: background 0.3s ease;
+  }
+  .progress .seg.active { background: var(--signature); }
+  .progress .seg.done { background: var(--ink-soft); }
+
+  .nav-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px; height: 44px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 100;
+    color: var(--ink);
+    font-size: 18px;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(8px);
+  }
+  .nav-btn:hover { background: #fff; border-color: var(--signature); color: var(--signature); }
+  .nav-prev { left: 20px; }
+  .nav-next { right: 20px; }
+
+  .key-hint {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gray-1);
+    background: rgba(247, 246, 242, 0.85);
+    backdrop-filter: blur(8px);
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    z-index: 100;
+    opacity: 0.85;
+  }
+  .key-hint kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink);
+    background: var(--surface);
+    padding: 1px 5px;
+    border: 1px solid var(--border-soft);
+    border-radius: 3px;
+    margin: 0 3px;
+  }
 </style>
 </head>
 <body>
 
 <div class="deck" id="deck">
 
-<!-- ==================== SLIDE 1 ==================== -->
-<div class="slide active" id="s1">
-  <div class="slide-title">When AI Should Say No</div>
-  <div class="slide-subtitle">The enterprise problem is not generation, it is judgment</div>
-  <ul class="bullets">
-    <li>AI can write ad copy, pick audiences, call ad APIs</li>
-    <li>What enterprises actually need: know when not to spend</li>
-    <li>Wrong objective + no pixel = budget waste, not experimentation</li>
-    <li class="mono">"The agent that says no is more useful than the agent that says go"</li>
-  </ul>
-</div>
-
-<!-- ==================== SLIDE 2 ==================== -->
-<div class="slide" id="s2">
-  <div class="slide-title">Plan It. Audit It. Pause It.</div>
-  <div class="slide-subtitle">AdAudit is the AI media buyer that audits before it spends</div>
-  <ul class="bullets">
-    <li><span class="pill">PLAN</span> compare 3 strategies: validation / balanced / aggressive</li>
-    <li><span class="pill">AUDIT</span> 6 program-level causal guardrails, not LLM self-checks</li>
-    <li><span class="pill green">PAUSE</span> output PAUSED Meta campaign, no ACTIVE path exists</li>
-    <li class="mono">LLM proposes, code enforces -- agent cannot bypass assertions</li>
-  </ul>
-</div>
-
-<!-- ==================== SLIDE 3 ==================== -->
-<div class="slide" id="s3">
-  <div class="slide-title">8 Agents, 1 Guarded Chain</div>
-  <div class="slide-subtitle">Each agent produces evidence the next agent depends on</div>
-  <div class="arch-flow">
-    <div class="arch-row"><span class="agent-name">evidence agent</span> <span class="tools">browser.fetch / competitor.search / vision.analyze</span></div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">knowledge agent</span> <span class="tools">7 paid-media playbooks by keyword match</span></div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">media planner agent</span> <span class="tools">3 strategies with budget, signal, risk per option</span></div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">budget economics agent</span> <span class="tools">CPC / CPM / learning phase / CPA math</span></div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">delivery readiness agent</span> <span class="tools">objective x pixel x placement policy lookup</span></div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">coordinator agent</span> <span class="tools">pick best, rewrite claims, record why alternatives lose</span></div>
-    <div class="arch-divider arch-divider-label">6 causal guardrails -- program-level hard assertions</div>
-    <div class="arch-arrow">|</div>
-    <div class="arch-row"><span class="agent-name">paused executor</span> <span class="tools">Meta-compatible PAUSED spec, no ACTIVE path</span></div>
+  <!-- ============================================================
+       SLIDE 1 — HOOK
+       ============================================================ -->
+  <div class="slide s1 active" id="s1">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">01<span class="sep">/</span>07</div>
+    <div class="kicker">▸ The problem</div>
+    <h1>When AI<br/>should say no.</h1>
+    <p class="lede">
+      AI agents can now write copy, pick audiences, and call ad APIs.<br/>
+      The enterprise problem is the opposite: <em>knowing when not to spend</em>.
+    </p>
+    <div class="rule"></div>
+    <div class="footnote">$500 + wrong objective + cold pixel = waste, not experimentation.</div>
   </div>
-</div>
 
-<!-- ==================== SLIDE 4 ==================== -->
-<div class="slide" id="s4">
-  <div class="slide-title">See the Risk on the Creative</div>
-  <div class="slide-subtitle">Gemini Vision + Nano Banana: the ad image annotated with what Gemini saw</div>
-  <ul class="bullets">
-    <li>Upload creative -- <span class="pill">gemini-2.5-flash</span> analyzes text, claims, policy concerns</li>
-    <li>Findings mapped to numbered markers on the image (severity-colored)</li>
-    <li><span class="pill amber">Nano Banana</span> gemini-2.5-flash-image draws visual annotations on the creative</li>
-    <li>Markers: <span class="pill red">HIGH</span> red, <span class="pill amber">MED</span> orange, <span class="pill green">LOW</span> green</li>
-    <li class="mono">Watermark: gemini-2.5-flash · vertex-ai · adc -- authentication proof</li>
-  </ul>
-</div>
-
-<!-- ==================== SLIDE 5 ==================== -->
-<div class="slide" id="s5">
-  <div class="slide-title">6 Assertions the LLM Cannot Bypass</div>
-  <div class="slide-subtitle">Program-level checks comparing LLM output fields, not LLM self-assertions</div>
-  <div class="guardrail-grid">
-    <div class="guardrail-item"><span class="check">6/6</span> <span>budget_ad_set_limit_applied</span> <span class="label">ad_set count capped by budget size</span></div>
-    <div class="guardrail-item"><span class="check">6/6</span> <span>delivery_objective_applied</span> <span class="label">objective matches campaign type</span></div>
-    <div class="guardrail-item"><span class="check">6/6</span> <span>objective_pixel_safety</span> <span class="label">conversion objective requires verified pixel</span></div>
-    <div class="guardrail-item"><span class="check">6/6</span> <span>economics_safety</span> <span class="label">CPA target is mathematically achievable</span></div>
-    <div class="guardrail-item"><span class="check">6/6</span> <span>risky_claim_rewritten</span> <span class="label">outcome-promise claims replaced</span></div>
-    <div class="guardrail-item"><span class="check">6/6</span> <span>timeline_order</span> <span class="label">learning phase budget precedes scale</span></div>
+  <!-- ============================================================
+       SLIDE 2 — THE THREE VERBS
+       ============================================================ -->
+  <div class="slide s2" id="s2">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">02<span class="sep">/</span>07</div>
+    <div class="eyebrow">▸ The solution</div>
+    <h2>Plan it. Audit it. <em>Pause it.</em></h2>
+    <div class="verbs">
+      <div class="verb">
+        <div class="vnum">01 / Plan</div>
+        <div class="vname">Plan.</div>
+        <div class="vbody">
+          Compare <strong>three</strong> media plans: a cheap validation, a balanced lead-gen, and an aggressive conversion test. Each one has objective, budget, signal expectation, and a viability comment.
+        </div>
+        <div class="vtag">8 specialist agents</div>
+      </div>
+      <div class="verb">
+        <div class="vnum">02 / Audit</div>
+        <div class="vname">Audit.</div>
+        <div class="vbody">
+          Six <strong>program-level</strong> assertions run on the LLM's output. The agent cannot bypass them. Budget limits, pixel safety, economics, claim rewrite, delivery objective, timeline order.
+        </div>
+        <div class="vtag">6 of 6 must pass</div>
+      </div>
+      <div class="verb pause">
+        <div class="vnum">03 / Pause</div>
+        <div class="vname">Pause.</div>
+        <div class="vbody">
+          The executor produces only <strong>Meta-compatible PAUSED</strong> campaign objects. Active spend has no code path. A human approval is structurally required, not a UX flag.
+        </div>
+        <div class="vtag">No ACTIVE in the codebase</div>
+      </div>
+    </div>
   </div>
-  <div class="quote-block">LLM proposes, code enforces</div>
-</div>
 
-<!-- ==================== SLIDE 6 ==================== -->
-<div class="slide" id="s6">
-  <div class="slide-title">Four Tracks, One System</div>
-  <div class="slide-subtitle">Award alignment across Vultr, Gemini, Enterprise, and Collaborative</div>
-  <div class="track-table">
-    <div class="track-row"><span class="track-name">Vultr Award</span><span class="track-fit">VM deployed (Ubuntu 24.04, PM2, systemd) -- central system of record</span></div>
-    <div class="track-row"><span class="track-name">Gemini Award</span><span class="track-fit">Vertex AI ADC, gemini-2.5-flash Vision + Nano Banana image editing</span></div>
-    <div class="track-row"><span class="track-name">Enterprise Utility</span><span class="track-fit">media buying is a measurable business workflow with real budget waste</span></div>
-    <div class="track-row"><span class="track-name">Collaborative Systems</span><span class="track-fit">8 agents in a causal chain, each producing evidence the next consumes</span></div>
-    <div class="track-row"><span class="track-name">Multimodal Intelligence</span><span class="track-fit">Vision analysis + Image editing annotation, two modalities on one creative</span></div>
+  <!-- ============================================================
+       SLIDE 3 — ARCHITECTURE
+       ============================================================ -->
+  <div class="slide s3" id="s3">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">03<span class="sep">/</span>07</div>
+    <div class="head">
+      <h2>Eight agents.<br/>One <em>guarded</em> chain.</h2>
+      <div class="meta">
+        Live SSE pipeline<br/>
+        <strong>11 event types</strong> · <strong>~18s</strong> per audit<br/>
+        Vertex AI · ADC · no API keys
+      </div>
+    </div>
+    <div class="arch">
+      <!-- Left rail: intake -->
+      <div class="arch-col">
+        <div class="arch-col-head">▸ Input</div>
+        <div class="arch-node">
+          <div class="name">Brief intake</div>
+          <div class="tools">product · budget · CPA · audience · creative</div>
+        </div>
+      </div>
+
+      <!-- Middle: the 6-agent chain + 6 guardrails -->
+      <div class="arch-col">
+        <div class="arch-col-head">▸ Eight agents in causal order</div>
+        <div class="arch-rail">
+          <div class="arch-step">
+            <div class="name">Evidence Agent</div>
+            <div class="tools">browser.fetch · competitor.search · vision.analyze</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Knowledge Agent</div>
+            <div class="tools">knowledge.search · 7 paid-media playbooks</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Media Planner Agent</div>
+            <div class="tools">3 scenarios · validation / balanced / aggressive</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Budget Economics Agent</div>
+            <div class="tools">math.compute · CPC × learning phase × CPA</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Delivery Readiness Agent</div>
+            <div class="tools">policy.lookup · objective × pixel × placement</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Coordinator Agent</div>
+            <div class="tools">picks one · rewrites risky claim · records rejections</div>
+          </div>
+          <div class="arch-guard">
+            <div class="name">6 Causal Guardrails</div>
+            <div class="tools">audit.score · program-level hard assertions</div>
+          </div>
+          <div class="arch-step">
+            <div class="name">Paused Executor</div>
+            <div class="tools">Meta-compatible campaign · status = PAUSED</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: deliverable -->
+      <div class="arch-col">
+        <div class="arch-col-head">▸ Deliverable</div>
+        <div class="arch-node">
+          <div class="name">Campaign package</div>
+          <div class="tools">scenarios + before/after diff + paused exec spec + reliability proof</div>
+        </div>
+        <div class="arch-node" style="background: var(--ready-bg); border-color: rgba(20,83,45,0.3);">
+          <div class="name" style="color: var(--ready);">Human approval gate</div>
+          <div class="tools" style="color: var(--ready);">no ACTIVE code path</div>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
 
-<!-- ==================== SLIDE 7 ==================== -->
-<div class="slide" id="s7">
-  <div class="slide-title">Try It. Upload a Risky Ad.</div>
-  <div class="slide-subtitle">Live demo, always running</div>
-  <ul class="bullets">
-    <li>Live URL -- always live, no fixture mode</li>
-    <li>GitHub: github.com/calebguo007/adaudit-meta-preflight</li>
-    <li>Upload any ad image with a risky claim, watch it refuse to launch</li>
-    <li>Default brief: $500 Meta test, "AI Resume Optimizer", risky claim "Land a job in 7 days"</li>
-    <li>AdAudit rewrites the claim, caps the ad sets, outputs PAUSED</li>
-  </ul>
-  <div class="cta-row">
-    <span class="cta-url">http://95.179.162.188:8080</span>
-    <span class="cta-link">github.com/calebguo007/adaudit-meta-preflight</span>
+  <!-- ============================================================
+       SLIDE 4 — MULTIMODAL
+       ============================================================ -->
+  <div class="slide s4" id="s4">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">04<span class="sep">/</span>07</div>
+    <div class="head">
+      <h2>See the risk<br/><em>on the creative.</em></h2>
+      <div class="badge-row">
+        <span class="gem-badge"><span class="dot"></span>GEMINI VISION + NANO BANANA</span>
+        <span class="submeta">gemini-2.5-flash · gemini-2.5-flash-image · vertex-ai · adc</span>
+      </div>
+    </div>
+
+    <div class="vision-grid">
+      <!-- Mock annotated ad creative -->
+      <div class="creative-mock">
+        <div class="cm-headline">Land a job in <u>7 days</u> — guaranteed.</div>
+        <div class="cm-sub">AI rewrites your résumé. Recruiters notice in a week.</div>
+        <div class="cm-cta">CLAIM IT NOW →</div>
+        <div class="cm-brand">RÉSUMÉ.AI</div>
+        <div class="cm-watermark">gemini-2.5-flash · vertex-ai · adc</div>
+        <div class="marker" style="top: 22%; left: 50%;">1</div>
+        <div class="marker m2" style="top: 70%; left: 22%;">2</div>
+        <div class="marker m3" style="top: 50%; left: 70%;">3</div>
+      </div>
+
+      <!-- Findings panel -->
+      <div class="findings">
+        <div class="findings-head">▸ What Gemini saw</div>
+        <div class="finding">
+          <div class="n">1</div>
+          <div class="body">
+            <strong>Outcome-promise headline detected</strong>
+            <span>"land a job in 7 days" · employment policy §4.b · severity HIGH</span>
+          </div>
+        </div>
+        <div class="finding">
+          <div class="n">2</div>
+          <div class="body">
+            <strong>Time-bound guarantee in CTA</strong>
+            <span>"claim it now" + "7 days" reinforces unverifiable promise · severity HIGH</span>
+          </div>
+        </div>
+        <div class="finding medium">
+          <div class="n">3</div>
+          <div class="body">
+            <strong>Urgency framing without substantiation</strong>
+            <span>"recruiters notice in a week" implies outcome timing · severity MEDIUM</span>
+          </div>
+        </div>
+        <div class="nano-row">
+          <span class="nano-tag">Nano Banana</span>
+          <span class="nano-line">
+            <strong>gemini-2.5-flash-image</strong> draws the markers directly on the uploaded creative, then returns the annotated image to the verdict UI.
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- ============================================================
+       SLIDE 5 — CAUSAL GUARDRAILS
+       ============================================================ -->
+  <div class="slide s5" id="s5">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">05<span class="sep">/</span>07</div>
+    <div class="head">
+      <h2>Six assertions the LLM <em>cannot bypass.</em></h2>
+      <p class="sub">
+        Program-level checks comparing fields in the LLM's output against hard limits. Not LLM self-checks. <strong>Code overrides the agent.</strong>
+      </p>
+    </div>
+    <div class="guard-grid">
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">01</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">budget_ad_set_limit_applied</div>
+        <div class="guard-body">Ad-set count is capped by budget size. $500 cannot fragment into more than 2 ad sets, period.</div>
+      </article>
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">02</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">delivery_objective_applied</div>
+        <div class="guard-body">Selected objective must match the recommended campaign type. No silent override.</div>
+      </article>
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">03</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">objective_pixel_safety</div>
+        <div class="guard-body">Conversion objective requires verified pixel events. Cold pixel forces fallback to leads.</div>
+      </article>
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">04</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">economics_safety</div>
+        <div class="guard-body">Target CPA must be mathematically achievable given AOV, gross margin, CPC band.</div>
+      </article>
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">05</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">risky_claim_rewritten</div>
+        <div class="guard-body">Outcome-promise and time-bound guarantee claims are replaced with proof-based copy.</div>
+      </article>
+      <article class="guard">
+        <div class="guard-top">
+          <span class="guard-num">06</span>
+          <span class="guard-pass">PASS</span>
+        </div>
+        <div class="guard-id">timeline_order</div>
+        <div class="guard-body">Learning-phase budget allocation precedes any scaling. Order is enforced, not suggested.</div>
+      </article>
+    </div>
+    <div class="closer">LLM proposes. <em>Code enforces.</em></div>
+  </div>
+
+  <!-- ============================================================
+       SLIDE 6 — TRACKS
+       ============================================================ -->
+  <div class="slide s6" id="s6">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">06<span class="sep">/</span>07</div>
+    <div class="eyebrow">▸ Award alignment</div>
+    <h2>Four tracks.<br/><em>One system.</em></h2>
+    <div class="tracks">
+      <div class="track">
+        <div class="track-name">Vultr Award</div>
+        <div class="track-fit">VM deployed on Ubuntu 24.04 in Frankfurt, PM2 + systemd autostart. <strong>The Vultr backend is the central system of record</strong> for intake, orchestration, knowledge, guardrails, and paused launch.</div>
+        <div class="track-id">▸ 01</div>
+      </div>
+      <div class="track">
+        <div class="track-name">Gemini Award</div>
+        <div class="track-fit"><strong>gemini-2.5-flash</strong> for reasoning + multimodal vision; <strong>gemini-2.5-flash-image (Nano Banana)</strong> for visible creative annotation. Authenticated via Vertex AI ADC, not API keys. Two Gemini products in one pipeline.</div>
+        <div class="track-id">▸ 02</div>
+      </div>
+      <div class="track">
+        <div class="track-name">Enterprise Utility</div>
+        <div class="track-fit">Media buying is a measurable business workflow with real waste. AdAudit's deliverable is a paused campaign package a CMO can sign off on, not a chat reply.</div>
+        <div class="track-id">▸ 03</div>
+      </div>
+      <div class="track">
+        <div class="track-name">Collaborative Systems</div>
+        <div class="track-fit">Eight named agents and tools in a strict causal chain. Each one produces an artifact the next consumes. The handoff timeline is rendered in the verdict UI.</div>
+        <div class="track-id">▸ 04</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SLIDE 7 — CTA
+       ============================================================ -->
+  <div class="slide s7" id="s7">
+    <div class="wordmark">AdAudit</div>
+    <div class="slide-num">07<span class="sep">/</span>07</div>
+    <div class="top">
+      <span class="pulse"></span>
+      Live agent run · always real · no fixture mode
+    </div>
+    <h1>Try it.</h1>
+    <div class="url-box">
+      <span class="label">▸ Live demo</span>
+      <span class="url">95.179.162.188:8080</span>
+    </div>
+    <div class="github">
+      ▸ Source · <strong>github.com/calebguo007/adaudit-meta-preflight</strong>
+    </div>
+    <p class="closer">
+      AdAudit is the AI media buyer that can plan — <em>and knows when to stop.</em>
+    </p>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- Deck chrome -->
+<div class="key-hint">
+  <kbd>←</kbd> <kbd>→</kbd> or <kbd>Space</kbd> to navigate
 </div>
-
-</div><!-- deck -->
-
-<div class="slide-counter" id="counter">1 / 7</div>
-<div class="key-hint">Arrow keys / Space to navigate</div>
-<button class="nav-btn nav-prev" id="prev" aria-label="Previous slide">&larr;</button>
-<button class="nav-btn nav-next" id="next" aria-label="Next slide">&rarr;</button>
+<div class="counter">
+  <span class="cur" id="cur">01</span><span class="sep">/</span><span class="tot">07</span>
+</div>
+<div class="progress" id="progress"></div>
+<button class="nav-btn nav-prev" id="prev" aria-label="Previous slide">←</button>
+<button class="nav-btn nav-next" id="next" aria-label="Next slide">→</button>
 
 <script>
-(function(){
+(function () {
   const slides = document.querySelectorAll('.slide');
   const total = slides.length;
   let current = 0;
-  const counter = document.getElementById('counter');
   const SW = 1920, SH = 1080;
 
-  function positionSlides(){
+  const cur = document.getElementById('cur');
+  const progress = document.getElementById('progress');
+
+  // Build progress segments
+  for (let i = 0; i < total; i++) {
+    const seg = document.createElement('span');
+    seg.className = 'seg';
+    progress.appendChild(seg);
+  }
+
+  function positionSlides() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const sx = vw / SW;
-    const sy = vh / SH;
-    const s = Math.min(sx, sy);
-
-    // Calculate left/top to center the scaled slide in the viewport
+    const s = Math.min(vw / SW, vh / SH);
     const renderedW = SW * s;
     const renderedH = SH * s;
     const left = (vw - renderedW) / 2;
     const top = (vh - renderedH) / 2;
-
-    slides.forEach(function(slide){
-      slide.style.width = SW + 'px';
-      slide.style.height = SH + 'px';
-      slide.style.transform = 'scale(' + s + ')';
+    slides.forEach((slide) => {
+      slide.style.transform = `scale(${s})`;
       slide.style.transformOrigin = '0 0';
       slide.style.left = left + 'px';
       slide.style.top = top + 'px';
     });
   }
 
-  function showSlide(n){
-    if(n < 0) n = 0;
-    if(n >= total) n = total - 1;
+  function updateProgress() {
+    const segs = progress.querySelectorAll('.seg');
+    segs.forEach((seg, i) => {
+      seg.classList.remove('active', 'done');
+      if (i < current) seg.classList.add('done');
+      else if (i === current) seg.classList.add('active');
+    });
+  }
+
+  function showSlide(n) {
+    if (n < 0) n = 0;
+    if (n >= total) n = total - 1;
     slides[current].classList.remove('active');
     current = n;
     slides[current].classList.add('active');
+    cur.textContent = String(current + 1).padStart(2, '0');
+    updateProgress();
     positionSlides();
-    counter.textContent = (current + 1) + ' / ' + total;
-    localStorage.setItem('adaudit-slide', current);
+    try { localStorage.setItem('adaudit-slide', String(current)); } catch (_) {}
   }
 
-  function next(){ showSlide(current + 1); }
-  function prev(){ showSlide(current - 1); }
+  document.getElementById('next').onclick = () => showSlide(current + 1);
+  document.getElementById('prev').onclick = () => showSlide(current - 1);
 
-  document.getElementById('next').onclick = next;
-  document.getElementById('prev').onclick = prev;
-
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown'){ e.preventDefault(); next(); }
-    if(e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ e.preventDefault(); prev(); }
-    if(e.key === 'Home'){ e.preventDefault(); showSlide(0); }
-    if(e.key === 'End'){ e.preventDefault(); showSlide(total - 1); }
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', ' ', 'ArrowDown', 'PageDown'].includes(e.key)) {
+      e.preventDefault();
+      showSlide(current + 1);
+    }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) {
+      e.preventDefault();
+      showSlide(current - 1);
+    }
+    if (e.key === 'Home') { e.preventDefault(); showSlide(0); }
+    if (e.key === 'End') { e.preventDefault(); showSlide(total - 1); }
   });
 
   window.addEventListener('resize', positionSlides);
 
-  // Init
   positionSlides();
-  const saved = localStorage.getItem('adaudit-slide');
-  if(saved !== null) showSlide(parseInt(saved));
-  else showSlide(0);
+  try {
+    const saved = localStorage.getItem('adaudit-slide');
+    if (saved !== null) showSlide(parseInt(saved, 10));
+    else updateProgress();
+  } catch (_) {
+    updateProgress();
+  }
 })();
 </script>
 </body>
