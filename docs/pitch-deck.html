@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AdAudit -- AI Agent Olympics Pitch</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* === Reset === */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+/* === Design tokens (AdAudit palette) === */
+:root{
+  --bg-warm:#F7F6F2;
+  --bg-white:#FFFFFF;
+  --ink:#1A1A1A;
+  --ink-soft:#615D59;
+  --ink-muted:#A39E98;
+  --deep-blue:#0F2C5E;
+  --deep-blue-light:#1A3D7A;
+  --blue-accent:#2B7DE9;
+  --red-risk:#C0392B;
+  --amber-warn:#D4880F;
+  --green-safe:#1AAE39;
+  --green-soft:#2A9D99;
+  --border-whisper:1px solid rgba(0,0,0,.1);
+  --radius:6px;
+  --radius-pill:9999px;
+  --shadow-card:rgba(50,50,93,.08) 0 8px 24px,rgba(0,0,0,.04) 0 2px 8px;
+  --shadow-deep:rgba(50,50,93,.15) 0 16px 40px -16px,rgba(0,0,0,.06) 0 8px 20px -8px;
+  --font-display:'Fraunces',Georgia,serif;
+  --font-sans:'Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:'DM Mono','JetBrains Mono',ui-monospace,monospace;
+  --slide-w:1920px;
+  --slide-h:1080px;
+}
+
+html,body{
+  height:100%;
+  background:#E8E7E3;
+  font-family:var(--font-sans);
+  color:var(--ink);
+  overflow:hidden;
+}
+
+/* === Deck container === */
+.deck{
+  position:relative;
+  width:100vw;height:100vh;
+  overflow:hidden;
+}
+
+.slide{
+  position:absolute;
+  width:var(--slide-w);height:var(--slide-h);
+  background:var(--bg-warm);
+  padding:80px 100px;
+  display:flex;flex-direction:column;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .4s ease;
+  will-change:opacity;
+  /* centering will be done by JS via left/top + transform */
+}
+.slide.active{
+  opacity:1;
+  pointer-events:auto;
+}
+
+/* === Typography === */
+.slide-title{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:clamp(48px,5.5vw,72px);
+  line-height:.96;
+  letter-spacing:-.03em;
+  color:var(--deep-blue);
+  margin-bottom:8px;
+}
+.slide-subtitle{
+  font-family:var(--font-sans);
+  font-weight:500;
+  font-size:clamp(18px,1.8vw,22px);
+  color:var(--ink-soft);
+  margin-bottom:40px;
+  letter-spacing:.01em;
+}
+.bullets{
+  list-style:none;
+  display:flex;flex-direction:column;gap:18px;
+  flex:1;
+}
+.bullets li{
+  font-family:var(--font-sans);
+  font-weight:400;
+  font-size:clamp(20px,2vw,26px);
+  line-height:1.45;
+  color:var(--ink);
+  padding-left:28px;
+  position:relative;
+}
+.bullets li::before{
+  content:'';
+  position:absolute;left:0;top:10px;
+  width:8px;height:8px;
+  background:var(--deep-blue);
+  border-radius:50%;
+}
+.bullets li.mono{
+  font-family:var(--font-mono);
+  font-weight:400;
+  font-size:clamp(18px,1.7vw,23px);
+  color:var(--ink-soft);
+}
+.bullets li.mono::before{
+  background:var(--ink-muted);
+  width:6px;height:6px;
+}
+
+/* === Guardrail list === */
+.guardrail-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px 28px;
+}
+.guardrail-item{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);
+  font-weight:500;
+  font-size:clamp(16px,1.5vw,20px);
+  color:var(--deep-blue);
+}
+.guardrail-item .check{
+  color:var(--green-safe);
+  font-weight:700;
+  font-size:1.1em;
+}
+.guardrail-item .label{
+  color:var(--ink-soft);
+  font-family:var(--font-sans);
+  font-weight:400;
+  font-size:.85em;
+}
+
+/* === Arch flow === */
+.arch-flow{
+  display:flex;flex-direction:column;gap:6px;
+  margin-top:8px;
+}
+.arch-row{
+  display:flex;align-items:center;gap:12px;
+  font-family:var(--font-mono);
+  font-size:clamp(14px,1.3vw,18px);
+  color:var(--ink-soft);
+}
+.arch-row .agent-name{
+  font-family:var(--font-sans);
+  font-weight:600;
+  color:var(--deep-blue);
+}
+.arch-row .tools{
+  color:var(--ink-muted);
+  font-weight:400;
+}
+.arch-arrow{
+  color:var(--ink-muted);
+  font-size:18px;
+  text-align:center;
+  line-height:1;
+}
+.arch-divider{
+  border-top:1px dashed var(--deep-blue);
+  padding-top:6px;
+}
+.arch-divider-label{
+  font-family:var(--font-sans);
+  font-weight:700;
+  color:var(--deep-blue);
+  font-size:clamp(16px,1.5vw,20px);
+}
+
+/* === Track table === */
+.track-table{
+  display:flex;flex-direction:column;gap:14px;
+}
+.track-row{
+  display:flex;gap:16px;align-items:flex-start;
+}
+.track-name{
+  font-family:var(--font-sans);
+  font-weight:700;
+  font-size:clamp(18px,1.7vw,22px);
+  color:var(--deep-blue);
+  min-width:220px;
+  flex-shrink:0;
+}
+.track-fit{
+  font-family:var(--font-sans);
+  font-weight:400;
+  font-size:clamp(18px,1.7vw,22px);
+  color:var(--ink);
+  line-height:1.4;
+}
+
+/* === Quote block === */
+.quote-block{
+  font-family:var(--font-display);
+  font-weight:400;
+  font-style:italic;
+  font-size:clamp(24px,2.6vw,36px);
+  color:var(--deep-blue);
+  line-height:1.2;
+  padding:24px 0;
+  border-left:3px solid var(--deep-blue);
+  padding-left:24px;
+}
+
+/* === Pill badge === */
+.pill{
+  display:inline-flex;
+  align-items:center;gap:6px;
+  font-family:var(--font-mono);
+  font-weight:500;
+  font-size:clamp(11px,1vw,14px);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  padding:4px 12px;
+  border-radius:var(--radius-pill);
+  background:var(--deep-blue);
+  color:#fff;
+}
+.pill.red{background:var(--red-risk);color:#fff;}
+.pill.amber{background:var(--amber-warn);color:#fff;}
+.pill.green{background:var(--green-safe);color:#fff;}
+
+/* === CTA === */
+.cta-row{
+  display:flex;gap:16px;align-items:center;
+  margin-top:auto;
+  padding-top:24px;
+}
+.cta-url{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-style:italic;
+  font-size:clamp(28px,3vw,40px);
+  color:var(--deep-blue);
+}
+.cta-link{
+  font-family:var(--font-sans);
+  font-weight:500;
+  font-size:clamp(18px,1.7vw,22px);
+  color:var(--blue-accent);
+  text-decoration:underline;
+  text-decoration-color:rgba(43,125,233,.3);
+}
+
+/* === Slide counter === */
+.slide-counter{
+  position:fixed;
+  bottom:24px;right:32px;
+  font-family:var(--font-mono);
+  font-weight:400;
+  font-size:14px;
+  color:var(--ink-muted);
+  z-index:100;
+}
+
+/* === Nav arrows === */
+.nav-btn{
+  position:fixed;
+  top:50%;
+  transform:translateY(-50%);
+  width:48px;height:48px;
+  border:var(--border-whisper);
+  background:rgba(255,255,255,.72);
+  border-radius:var(--radius);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:100;
+  font-family:var(--font-sans);font-size:20px;
+  color:var(--ink);
+  transition:background .2s,transform .2s;
+  backdrop-filter:blur(8px);
+}
+.nav-btn:hover{background:#fff;transform:translateY(-50%) scale(1.08)}
+.nav-prev{left:16px}
+.nav-next{right:16px}
+
+/* === Keyboard hint === */
+.key-hint{
+  position:fixed;
+  bottom:24px;left:32px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--ink-muted);
+  z-index:100;
+}
+
+/* === Responsive scale === */
+/* responsive scaling handled by JS */
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ==================== SLIDE 1 ==================== -->
+<div class="slide active" id="s1">
+  <div class="slide-title">When AI Should Say No</div>
+  <div class="slide-subtitle">The enterprise problem is not generation, it is judgment</div>
+  <ul class="bullets">
+    <li>AI can write ad copy, pick audiences, call ad APIs</li>
+    <li>What enterprises actually need: know when not to spend</li>
+    <li>Wrong objective + no pixel = budget waste, not experimentation</li>
+    <li class="mono">"The agent that says no is more useful than the agent that says go"</li>
+  </ul>
+</div>
+
+<!-- ==================== SLIDE 2 ==================== -->
+<div class="slide" id="s2">
+  <div class="slide-title">Plan It. Audit It. Pause It.</div>
+  <div class="slide-subtitle">AdAudit is the AI media buyer that audits before it spends</div>
+  <ul class="bullets">
+    <li><span class="pill">PLAN</span> compare 3 strategies: validation / balanced / aggressive</li>
+    <li><span class="pill">AUDIT</span> 6 program-level causal guardrails, not LLM self-checks</li>
+    <li><span class="pill green">PAUSE</span> output PAUSED Meta campaign, no ACTIVE path exists</li>
+    <li class="mono">LLM proposes, code enforces -- agent cannot bypass assertions</li>
+  </ul>
+</div>
+
+<!-- ==================== SLIDE 3 ==================== -->
+<div class="slide" id="s3">
+  <div class="slide-title">8 Agents, 1 Guarded Chain</div>
+  <div class="slide-subtitle">Each agent produces evidence the next agent depends on</div>
+  <div class="arch-flow">
+    <div class="arch-row"><span class="agent-name">evidence agent</span> <span class="tools">browser.fetch / competitor.search / vision.analyze</span></div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">knowledge agent</span> <span class="tools">7 paid-media playbooks by keyword match</span></div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">media planner agent</span> <span class="tools">3 strategies with budget, signal, risk per option</span></div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">budget economics agent</span> <span class="tools">CPC / CPM / learning phase / CPA math</span></div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">delivery readiness agent</span> <span class="tools">objective x pixel x placement policy lookup</span></div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">coordinator agent</span> <span class="tools">pick best, rewrite claims, record why alternatives lose</span></div>
+    <div class="arch-divider arch-divider-label">6 causal guardrails -- program-level hard assertions</div>
+    <div class="arch-arrow">|</div>
+    <div class="arch-row"><span class="agent-name">paused executor</span> <span class="tools">Meta-compatible PAUSED spec, no ACTIVE path</span></div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 4 ==================== -->
+<div class="slide" id="s4">
+  <div class="slide-title">See the Risk on the Creative</div>
+  <div class="slide-subtitle">Gemini Vision + Nano Banana: the ad image annotated with what Gemini saw</div>
+  <ul class="bullets">
+    <li>Upload creative -- <span class="pill">gemini-2.5-flash</span> analyzes text, claims, policy concerns</li>
+    <li>Findings mapped to numbered markers on the image (severity-colored)</li>
+    <li><span class="pill amber">Nano Banana</span> gemini-2.5-flash-image draws visual annotations on the creative</li>
+    <li>Markers: <span class="pill red">HIGH</span> red, <span class="pill amber">MED</span> orange, <span class="pill green">LOW</span> green</li>
+    <li class="mono">Watermark: gemini-2.5-flash · vertex-ai · adc -- authentication proof</li>
+  </ul>
+</div>
+
+<!-- ==================== SLIDE 5 ==================== -->
+<div class="slide" id="s5">
+  <div class="slide-title">6 Assertions the LLM Cannot Bypass</div>
+  <div class="slide-subtitle">Program-level checks comparing LLM output fields, not LLM self-assertions</div>
+  <div class="guardrail-grid">
+    <div class="guardrail-item"><span class="check">6/6</span> <span>budget_ad_set_limit_applied</span> <span class="label">ad_set count capped by budget size</span></div>
+    <div class="guardrail-item"><span class="check">6/6</span> <span>delivery_objective_applied</span> <span class="label">objective matches campaign type</span></div>
+    <div class="guardrail-item"><span class="check">6/6</span> <span>objective_pixel_safety</span> <span class="label">conversion objective requires verified pixel</span></div>
+    <div class="guardrail-item"><span class="check">6/6</span> <span>economics_safety</span> <span class="label">CPA target is mathematically achievable</span></div>
+    <div class="guardrail-item"><span class="check">6/6</span> <span>risky_claim_rewritten</span> <span class="label">outcome-promise claims replaced</span></div>
+    <div class="guardrail-item"><span class="check">6/6</span> <span>timeline_order</span> <span class="label">learning phase budget precedes scale</span></div>
+  </div>
+  <div class="quote-block">LLM proposes, code enforces</div>
+</div>
+
+<!-- ==================== SLIDE 6 ==================== -->
+<div class="slide" id="s6">
+  <div class="slide-title">Four Tracks, One System</div>
+  <div class="slide-subtitle">Award alignment across Vultr, Gemini, Enterprise, and Collaborative</div>
+  <div class="track-table">
+    <div class="track-row"><span class="track-name">Vultr Award</span><span class="track-fit">VM deployed (Ubuntu 24.04, PM2, systemd) -- central system of record</span></div>
+    <div class="track-row"><span class="track-name">Gemini Award</span><span class="track-fit">Vertex AI ADC, gemini-2.5-flash Vision + Nano Banana image editing</span></div>
+    <div class="track-row"><span class="track-name">Enterprise Utility</span><span class="track-fit">media buying is a measurable business workflow with real budget waste</span></div>
+    <div class="track-row"><span class="track-name">Collaborative Systems</span><span class="track-fit">8 agents in a causal chain, each producing evidence the next consumes</span></div>
+    <div class="track-row"><span class="track-name">Multimodal Intelligence</span><span class="track-fit">Vision analysis + Image editing annotation, two modalities on one creative</span></div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 7 ==================== -->
+<div class="slide" id="s7">
+  <div class="slide-title">Try It. Upload a Risky Ad.</div>
+  <div class="slide-subtitle">Live demo, always running</div>
+  <ul class="bullets">
+    <li>Live URL -- always live, no fixture mode</li>
+    <li>GitHub: github.com/calebguo007/adaudit-meta-preflight</li>
+    <li>Upload any ad image with a risky claim, watch it refuse to launch</li>
+    <li>Default brief: $500 Meta test, "AI Resume Optimizer", risky claim "Land a job in 7 days"</li>
+    <li>AdAudit rewrites the claim, caps the ad sets, outputs PAUSED</li>
+  </ul>
+  <div class="cta-row">
+    <span class="cta-url">http://95.179.162.188:8080</span>
+    <span class="cta-link">github.com/calebguo007/adaudit-meta-preflight</span>
+  </div>
+</div>
+
+</div><!-- deck -->
+
+<div class="slide-counter" id="counter">1 / 7</div>
+<div class="key-hint">Arrow keys / Space to navigate</div>
+<button class="nav-btn nav-prev" id="prev" aria-label="Previous slide">&larr;</button>
+<button class="nav-btn nav-next" id="next" aria-label="Next slide">&rarr;</button>
+
+<script>
+(function(){
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+  const counter = document.getElementById('counter');
+  const SW = 1920, SH = 1080;
+
+  function positionSlides(){
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const sx = vw / SW;
+    const sy = vh / SH;
+    const s = Math.min(sx, sy);
+
+    // Calculate left/top to center the scaled slide in the viewport
+    const renderedW = SW * s;
+    const renderedH = SH * s;
+    const left = (vw - renderedW) / 2;
+    const top = (vh - renderedH) / 2;
+
+    slides.forEach(function(slide){
+      slide.style.width = SW + 'px';
+      slide.style.height = SH + 'px';
+      slide.style.transform = 'scale(' + s + ')';
+      slide.style.transformOrigin = '0 0';
+      slide.style.left = left + 'px';
+      slide.style.top = top + 'px';
+    });
+  }
+
+  function showSlide(n){
+    if(n < 0) n = 0;
+    if(n >= total) n = total - 1;
+    slides[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    positionSlides();
+    counter.textContent = (current + 1) + ' / ' + total;
+    localStorage.setItem('adaudit-slide', current);
+  }
+
+  function next(){ showSlide(current + 1); }
+  function prev(){ showSlide(current - 1); }
+
+  document.getElementById('next').onclick = next;
+  document.getElementById('prev').onclick = prev;
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown'){ e.preventDefault(); next(); }
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ e.preventDefault(); prev(); }
+    if(e.key === 'Home'){ e.preventDefault(); showSlide(0); }
+    if(e.key === 'End'){ e.preventDefault(); showSlide(total - 1); }
+  });
+
+  window.addEventListener('resize', positionSlides);
+
+  // Init
+  positionSlides();
+  const saved = localStorage.getItem('adaudit-slide');
+  if(saved !== null) showSlide(parseInt(saved));
+  else showSlide(0);
+})();
+</script>
+</body>
+</html>
