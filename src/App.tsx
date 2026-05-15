@@ -15,6 +15,7 @@ type IntakeForm = {
   margin: string
   creativeDataUrl?: string
   creativeName?: string
+  creativeSize?: number
 }
 
 type RunMode = 'demo' | 'live'
@@ -391,14 +392,18 @@ function Intake({
   const budget = parseBudget(form)
   const claimRisk = getClaimRisk(form.claim)
   const canRun = form.product.trim() && budget > 0
+  const [isDraggingCreative, setIsDraggingCreative] = useState(false)
+  const creativeInputRef = useRef<HTMLInputElement | null>(null)
 
   const patch = (next: Partial<IntakeForm>) => setForm({ ...form, ...next })
   const onFile = (file?: File) => {
     if (!file) return
+    if (!file.type.startsWith('image/')) return
     const reader = new FileReader()
-    reader.onload = () => patch({ creativeDataUrl: String(reader.result), creativeName: file.name })
+    reader.onload = () => patch({ creativeDataUrl: String(reader.result), creativeName: file.name, creativeSize: file.size })
     reader.readAsDataURL(file)
   }
+  const clearCreative = () => patch({ creativeDataUrl: undefined, creativeName: undefined, creativeSize: undefined })
 
   return (
     <main className="aa-page aa-intake">
@@ -457,10 +462,51 @@ function Intake({
           <Field label="Current claim or hook">
             <textarea value={form.claim} onChange={(e) => patch({ claim: e.target.value })} placeholder="Land a job in 7 days" />
           </Field>
-          <label className="aa-upload">
-            <input type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0] || undefined)} />
-            {form.creativeDataUrl ? <img src={form.creativeDataUrl} alt={form.creativeName || 'Uploaded creative'} /> : <span>Upload ad creative for Gemini vision review</span>}
-          </label>
+          <div
+            className={`aa-upload ${isDraggingCreative ? 'is-dragging' : ''} ${form.creativeDataUrl ? 'has-creative' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => creativeInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') creativeInputRef.current?.click()
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              setIsDraggingCreative(true)
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+              setIsDraggingCreative(true)
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault()
+              if (event.currentTarget === event.target) setIsDraggingCreative(false)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              setIsDraggingCreative(false)
+              onFile(event.dataTransfer.files?.[0] || undefined)
+            }}
+          >
+            <input ref={creativeInputRef} type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0] || undefined)} />
+            {form.creativeDataUrl ? (
+              <>
+                <img src={form.creativeDataUrl} alt={form.creativeName || 'Uploaded creative'} />
+                <div className="aa-upload-meta" onClick={(event) => event.stopPropagation()}>
+                  <span>Gemini Vision input</span>
+                  <strong>{form.creativeName || 'Uploaded creative'}</strong>
+                  {form.creativeSize ? <small>{formatBytes(form.creativeSize)}</small> : <small>ready for multimodal review</small>}
+                  <button type="button" onClick={clearCreative}>Remove</button>
+                </div>
+              </>
+            ) : (
+              <div className="aa-upload-empty">
+                <strong>Drop an ad creative here</strong>
+                <span>or click to upload a Meta/TikTok-style image for Gemini Vision</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <aside className="aa-brief-card">
@@ -482,6 +528,18 @@ function Intake({
       </section>
     </main>
   )
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB'
+  const units = ['B', 'KB', 'MB']
+  let value = bytes
+  let index = 0
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024
+    index += 1
+  }
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
 function Vital({ label, value, text, risk }: { label: string; value: number; text: string; risk?: boolean }) {
